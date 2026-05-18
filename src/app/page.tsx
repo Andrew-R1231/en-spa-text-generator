@@ -34,7 +34,7 @@ const blankAppointment = {
   time: "",
 };
 
-function formatPractitioners(value) {
+function formatPractitioners(value: string) {
   const names = value
     .split(",")
     .map((name) => name.trim())
@@ -46,7 +46,7 @@ function formatPractitioners(value) {
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
 
-function generateText(appointment, suiteInfo) {
+function generateText(appointment: any, suiteInfo: any) {
   const client = appointment.clientName.trim() || "Client";
   const practitionerText = formatPractitioners(appointment.practitioners);
   const suite = appointment.suite;
@@ -66,8 +66,8 @@ export default function EnSpaDailyClientTextGenerator() {
       time: "",
     },
   ]);
-  const [suiteInfo, setSuiteInfo] = useState(DEFAULT_SUITES);
-  const [copiedIndex, setCopiedIndex] = useState(null);
+  const [suiteInfo, setSuiteInfo] = useState<Record<string, any>>(DEFAULT_SUITES);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const suites = Object.keys(suiteInfo);
 
@@ -76,7 +76,7 @@ export default function EnSpaDailyClientTextGenerator() {
     [appointments, suiteInfo]
   );
 
-  function updateAppointment(index, field, value) {
+  function updateAppointment(index: number, field: string, value: string) {
     setAppointments((items) =>
       items.map((item, i) => (i === index ? { ...item, [field]: value } : item))
     );
@@ -86,11 +86,11 @@ export default function EnSpaDailyClientTextGenerator() {
     setAppointments((items) => [...items, { ...blankAppointment }]);
   }
 
-  function removeAppointment(index) {
+  function removeAppointment(index: number) {
     setAppointments((items) => items.filter((_, i) => i !== index));
   }
 
-  function updateSuite(suite, field, value) {
+  function updateSuite(suite: string, field: string, value: string) {
     setSuiteInfo((current) => ({
       ...current,
       [suite]: {
@@ -100,7 +100,7 @@ export default function EnSpaDailyClientTextGenerator() {
     }));
   }
 
-  async function copyText(text, index) {
+  async function copyText(text: string, index: number) {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 1400);
