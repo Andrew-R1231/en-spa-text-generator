@@ -88,6 +88,7 @@ export default function EnSpaDailyClientTextGenerator() {
     DEFAULT_SUITES
   );
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [copiedImageIndex, setCopiedImageIndex] = useState<number | null>(null);
 
   const suites = Object.keys(suiteInfo);
 
@@ -117,6 +118,12 @@ export default function EnSpaDailyClientTextGenerator() {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 1400);
+  }
+
+  async function copyImageLink(imageUrl: string, index: number) {
+    await navigator.clipboard.writeText(imageUrl);
+    setCopiedImageIndex(index);
+    setTimeout(() => setCopiedImageIndex(null), 1400);
   }
 
   return (
@@ -242,10 +249,20 @@ export default function EnSpaDailyClientTextGenerator() {
                         <ImageIcon className="h-4 w-4" />
                         <span>Attach image: {suite.imageLabel}</span>
                       </div>
-                      <Button onClick={() => copyText(text, index)} className="rounded-2xl">
-                        <Copy className="mr-2 h-4 w-4" />
-                        {copiedIndex === index ? "Copied" : "Copy Text"}
-                      </Button>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button onClick={() => copyText(text, index)} className="rounded-2xl">
+                          <Copy className="mr-2 h-4 w-4" />
+                          {copiedIndex === index ? "Copied" : "Copy Text"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => copyImageLink(suite.imageUrl, index)}
+                          className="rounded-2xl"
+                        >
+                          <ImageIcon className="mr-2 h-4 w-4" />
+                          {copiedImageIndex === index ? "Image Link Copied" : "Copy Image Link"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
