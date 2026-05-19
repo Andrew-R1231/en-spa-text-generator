@@ -29,7 +29,7 @@ const DEFAULT_SUITES: Record<
       "It's the first Suite, closest to 41st St as you enter the parking lot.",
     imageLabel: "Front of Suite #1",
     imageUrl:
-      "https://assets.cdn.filesafe.space/ojs3QKQJqLYRU35DWKJB/media/6a0b964bcbda603d33054172.jpg",
+      "https://assets.cdn.filesafe.space/ojs3QKQJqLYRU35DWKJB/media/6a0bb6cb60b3f1e04ab72d4e.png",
   },
   "Suite #4": {
     mapUrl: "https://maps.app.goo.gl/WdBahdRetmdExWwT6",
@@ -37,7 +37,7 @@ const DEFAULT_SUITES: Record<
       "The door to Suite #4 is located farther into the parking lot, (it has an EN SPA sign on it), and come up the stairs - it's the door to your right, at the top.",
     imageLabel: "Front of Suite #4",
     imageUrl:
-      "https://assets.cdn.filesafe.space/ojs3QKQJqLYRU35DWKJB/media/6a0b964b36ce1b3e87ab27ad.jpg",
+      "https://assets.cdn.filesafe.space/ojs3QKQJqLYRU35DWKJB/media/6a0bb6cb36ce1b3e87af3d81.png",
   },
 };
 
@@ -136,7 +136,7 @@ export default function EnSpaDailyClientTextGenerator() {
   } catch (error) {
     console.error("Failed to copy image:", error);
   }
-  }
+}
 
   return (
     <div className="min-h-screen bg-stone-50 p-4 text-stone-900 md:p-8">
