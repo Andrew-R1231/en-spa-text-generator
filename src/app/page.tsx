@@ -98,14 +98,14 @@ function generateText(
 
   if (appointment.appointmentType === "Couples Massage") {
     if (appointment.clientType === "Returning Client") {
-      return `Good Morning ${client}, EN Spa here - your couples massage today${timeText} with ${practitionerText} is in ${suite}. Thank you - we’ll see you soon!`;
+      return `Good Morning ${client}, EN Spa here - your couples massage today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
     }
 
     return `Good Morning ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your couples massage today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
   }
 
   if (appointment.clientType === "Returning Client") {
-    return `Good Morning ${client}, EN Spa here - your session today${timeText} with ${practitionerText} is in ${suite}. Thank you - we’ll see you soon!`;
+    return `Good Morning ${client}, EN Spa here - your session today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
   }
 
   return `Good Morning ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your session today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
