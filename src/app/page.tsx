@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Copy, Plus, Trash2, MessageSquare, Image as ImageIcon } from "lucide-react";
+import {
+  Copy,
+  Plus,
+  Trash2,
+  MessageSquare,
+  Image as ImageIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -41,19 +47,38 @@ const DEFAULT_SUITES: Record<
   },
 };
 
+type ClientType = "New Client" | "Returning Client";
+type AppointmentType = "Standard" | "Couples Massage";
+
 type Appointment = {
   clientName: string;
+  clientType: ClientType;
+  appointmentType: AppointmentType;
   practitioner: string;
+  secondPractitioner: string;
   suite: string;
   time: string;
 };
 
 const blankAppointment: Appointment = {
   clientName: "",
+  clientType: "New Client",
+  appointmentType: "Standard",
   practitioner: "Peter",
+  secondPractitioner: "Liann",
   suite: "Suite #1",
   time: "",
 };
+
+function formatPractitioners(appointment: Appointment) {
+  if (appointment.appointmentType === "Couples Massage") {
+    const first = appointment.practitioner || "your first practitioner";
+    const second = appointment.secondPractitioner || "your second practitioner";
+    return `${first} and ${second}`;
+  }
+
+  return appointment.practitioner || "your practitioner";
+}
 
 function generateText(
   appointment: Appointment,
@@ -65,20 +90,35 @@ function generateText(
   }
 ) {
   const client = appointment.clientName.trim() || "Client";
-  const practitioner = appointment.practitioner || "your practitioner";
-  const suite = appointment.suite;
+  const practitionerText = formatPractitioners(appointment);
+  const suite = appointment.appointmentType === "Couples Massage" ? "Suite #4" : appointment.suite;
   const map = suiteInfo.mapUrl ? ` ${suiteInfo.mapUrl}` : "";
   const directions = suiteInfo.directions ? ` ${suiteInfo.directions}` : "";
   const timeText = appointment.time ? ` for your ${appointment.time} session` : "";
 
-  return `Good Morning ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your session today${timeText} with ${practitioner} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
+  if (appointment.appointmentType === "Couples Massage") {
+    if (appointment.clientType === "Returning Client") {
+      return `Good Morning ${client}, EN Spa here - your couples massage today${timeText} with ${practitionerText} is in ${suite}. Thank you - we’ll see you soon!`;
+    }
+
+    return `Good Morning ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your couples massage today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
+  }
+
+  if (appointment.clientType === "Returning Client") {
+    return `Good Morning ${client}, EN Spa here - your session today${timeText} with ${practitionerText} is in ${suite}. Thank you - we’ll see you soon!`;
+  }
+
+  return `Good Morning ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your session today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
 }
 
 export default function EnSpaDailyClientTextGenerator() {
   const [appointments, setAppointments] = useState<Appointment[]>([
     {
       clientName: "Matthew",
+      clientType: "New Client",
+      appointmentType: "Standard",
       practitioner: "Rebecca",
+      secondPractitioner: "Peter",
       suite: "Suite #1",
       time: "",
     },
@@ -94,15 +134,35 @@ export default function EnSpaDailyClientTextGenerator() {
 
   const generated = useMemo(
     () =>
-      appointments.map((appt) =>
-        generateText(appt, suiteInfo[appt.suite] || suiteInfo["Suite #1"])
-      ),
+      appointments.map((appt) => {
+        const suiteName = appt.appointmentType === "Couples Massage" ? "Suite #4" : appt.suite;
+        return generateText(appt, suiteInfo[suiteName] || suiteInfo["Suite #1"]);
+      }),
     [appointments, suiteInfo]
   );
 
   function updateAppointment(index: number, field: keyof Appointment, value: string) {
     setAppointments((items) =>
-      items.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+      items.map((item, i) => {
+        if (i !== index) return item;
+
+        if (field === "appointmentType" && value === "Couples Massage") {
+          return {
+            ...item,
+            appointmentType: "Couples Massage",
+            suite: "Suite #4",
+          };
+        }
+
+        if (field === "appointmentType" && value === "Standard") {
+          return {
+            ...item,
+            appointmentType: "Standard",
+          };
+        }
+
+        return { ...item, [field]: value };
+      })
     );
   }
 
@@ -121,22 +181,25 @@ export default function EnSpaDailyClientTextGenerator() {
   }
 
   async function copyImage(imageUrl: string, index: number) {
-  try {
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
 
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        [blob.type]: blob,
-      }),
-    ]);
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          [blob.type]: blob,
+        }),
+      ]);
 
-    setCopiedImageIndex(index);
-    setTimeout(() => setCopiedImageIndex(null), 1400);
-  } catch (error) {
-    console.error("Failed to copy image:", error);
+      setCopiedImageIndex(index);
+      setTimeout(() => setCopiedImageIndex(null), 1400);
+    } catch (error) {
+      console.error("Failed to copy image:", error);
+      alert(
+        "The image could not be copied directly. Try opening the image, right-clicking it, and choosing Copy Image."
+      );
+    }
   }
-}
 
   return (
     <div className="min-h-screen bg-stone-50 p-4 text-stone-900 md:p-8">
@@ -151,7 +214,7 @@ export default function EnSpaDailyClientTextGenerator() {
                 Daily Client Text Generator
               </h1>
               <p className="mt-2 max-w-2xl text-stone-600">
-                Add each scheduled client, choose the practitioner and suite, then copy the personalized message and attach the matching suite image.
+                Add each scheduled client, choose the client type, appointment type, practitioner, and suite, then copy the personalized message and matching suite image.
               </p>
             </div>
             <Button onClick={addAppointment} className="rounded-2xl">
@@ -163,7 +226,10 @@ export default function EnSpaDailyClientTextGenerator() {
         <div className="space-y-4">
           {appointments.map((appointment, index) => {
             const text = generated[index];
-            const suite = suiteInfo[appointment.suite] || suiteInfo["Suite #1"];
+            const suiteName =
+              appointment.appointmentType === "Couples Massage" ? "Suite #4" : appointment.suite;
+            const suite = suiteInfo[suiteName] || suiteInfo["Suite #1"];
+            const isCouplesMassage = appointment.appointmentType === "Couples Massage";
 
             return (
               <Card key={index} className="rounded-3xl border-stone-200 shadow-sm">
@@ -199,7 +265,49 @@ export default function EnSpaDailyClientTextGenerator() {
                     </label>
 
                     <label className="space-y-1 md:col-span-1">
-                      <span className="text-sm font-medium text-stone-600">Practitioner</span>
+                      <span className="text-sm font-medium text-stone-600">Client type</span>
+                      <select
+                        value={appointment.clientType}
+                        onChange={(e) =>
+                          updateAppointment(index, "clientType", e.target.value)
+                        }
+                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                      >
+                        <option value="New Client">New Client</option>
+                        <option value="Returning Client">Returning Client</option>
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 md:col-span-1">
+                      <span className="text-sm font-medium text-stone-600">Appointment type</span>
+                      <select
+                        value={appointment.appointmentType}
+                        onChange={(e) =>
+                          updateAppointment(index, "appointmentType", e.target.value)
+                        }
+                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                      >
+                        <option value="Standard">Standard</option>
+                        <option value="Couples Massage">Couples Massage</option>
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 md:col-span-1">
+                      <span className="text-sm font-medium text-stone-600">Time optional</span>
+                      <input
+                        value={appointment.time}
+                        onChange={(e) => updateAppointment(index, "time", e.target.value)}
+                        placeholder="10:30 AM"
+                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <label className="space-y-1 md:col-span-1">
+                      <span className="text-sm font-medium text-stone-600">
+                        {isCouplesMassage ? "Practitioner 1" : "Practitioner"}
+                      </span>
                       <select
                         value={appointment.practitioner}
                         onChange={(e) =>
@@ -215,31 +323,46 @@ export default function EnSpaDailyClientTextGenerator() {
                       </select>
                     </label>
 
+                    {isCouplesMassage && (
+                      <label className="space-y-1 md:col-span-1">
+                        <span className="text-sm font-medium text-stone-600">
+                          Practitioner 2
+                        </span>
+                        <select
+                          value={appointment.secondPractitioner}
+                          onChange={(e) =>
+                            updateAppointment(index, "secondPractitioner", e.target.value)
+                          }
+                          className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                        >
+                          {PRACTITIONERS.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+
                     <label className="space-y-1 md:col-span-1">
                       <span className="text-sm font-medium text-stone-600">Suite</span>
                       <select
-                        value={appointment.suite}
-                        onChange={(e) =>
-                          updateAppointment(index, "suite", e.target.value)
-                        }
-                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                        value={suiteName}
+                        disabled={isCouplesMassage}
+                        onChange={(e) => updateAppointment(index, "suite", e.target.value)}
+                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500 disabled:bg-stone-100 disabled:text-stone-500"
                       >
-                        {suites.map((suiteName) => (
-                          <option key={suiteName} value={suiteName}>
-                            {suiteName}
+                        {suites.map((suiteOption) => (
+                          <option key={suiteOption} value={suiteOption}>
+                            {suiteOption}
                           </option>
                         ))}
                       </select>
-                    </label>
-
-                    <label className="space-y-1 md:col-span-1">
-                      <span className="text-sm font-medium text-stone-600">Time optional</span>
-                      <input
-                        value={appointment.time}
-                        onChange={(e) => updateAppointment(index, "time", e.target.value)}
-                        placeholder="10:30 AM"
-                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
-                      />
+                      {isCouplesMassage && (
+                        <p className="text-xs text-stone-500">
+                          Couples massages are always assigned to Suite #4.
+                        </p>
+                      )}
                     </label>
                   </div>
 
