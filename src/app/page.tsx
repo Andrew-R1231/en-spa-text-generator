@@ -34,7 +34,7 @@ const DEFAULT_SUITES: Record<
   "Suite #4": {
     mapUrl: "https://maps.app.goo.gl/WdBahdRetmdExWwT6",
     directions:
-      "Suite #4 is located farther into the parking lot. Please look for the Suite #4 entrance shown in the attached photo.",
+      "The door to Suite #4 is located farther into the parking lot, (it has an EN SPA sign on it), and come up the stairs - it's the door to your right, at the top.",
     imageLabel: "Front of Suite #4",
     imageUrl:
       "https://assets.cdn.filesafe.space/ojs3QKQJqLYRU35DWKJB/media/6a0b964b36ce1b3e87ab27ad.jpg",
@@ -120,10 +120,22 @@ export default function EnSpaDailyClientTextGenerator() {
     setTimeout(() => setCopiedIndex(null), 1400);
   }
 
-  async function copyImageLink(imageUrl: string, index: number) {
-    await navigator.clipboard.writeText(imageUrl);
+  async function copyImage(imageUrl: string, index: number) {
+  try {
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        [blob.type]: blob,
+      }),
+    ]);
+
     setCopiedImageIndex(index);
     setTimeout(() => setCopiedImageIndex(null), 1400);
+  } catch (error) {
+    console.error("Failed to copy image:", error);
+  }
   }
 
   return (
@@ -256,11 +268,11 @@ export default function EnSpaDailyClientTextGenerator() {
                         </Button>
                         <Button
                           variant="outline"
-                          onClick={() => copyImageLink(suite.imageUrl, index)}
+                          onClick={() => copyImage(suite.imageUrl, index)}
                           className="rounded-2xl"
                         >
                           <ImageIcon className="mr-2 h-4 w-4" />
-                          {copiedImageIndex === index ? "Image Link Copied" : "Copy Image Link"}
+                          {copiedImageIndex === index ? "Image Copied" : "Copy Image"}
                         </Button>
                       </div>
                     </div>
