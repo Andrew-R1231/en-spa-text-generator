@@ -18,6 +18,8 @@ const PRACTITIONERS = [
   "Tiffany",
   "Rebecca",
   "Stephanie",
+  "Mina",
+  "Meghan",
 ];
 
 const DEFAULT_SUITES: Record<
@@ -54,6 +56,7 @@ type Appointment = {
   clientName: string;
   clientType: ClientType;
   appointmentType: AppointmentType;
+  greetingTime: "Morning" | "Afternoon";
   practitioner: string;
   secondPractitioner: string;
   suite: string;
@@ -64,6 +67,7 @@ const blankAppointment: Appointment = {
   clientName: "",
   clientType: "New Client",
   appointmentType: "Standard",
+  greetingTime: "Morning",
   practitioner: "Peter",
   secondPractitioner: "Liann",
   suite: "Suite #1",
@@ -89,6 +93,10 @@ function generateText(
     imageUrl: string;
   }
 ) {
+  const greeting =
+  appointment.greetingTime === "Afternoon"
+    ? "Good Afternoon"
+    : "Good Morning";
   const client = appointment.clientName.trim() || "Client";
   const practitionerText = formatPractitioners(appointment);
   const suite = appointment.appointmentType === "Couples Massage" ? "Suite #4" : appointment.suite;
@@ -98,17 +106,17 @@ function generateText(
 
   if (appointment.appointmentType === "Couples Massage") {
     if (appointment.clientType === "Returning Client") {
-      return `Good Morning ${client}, EN Spa here - your couples massage today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
+      return `${greeting} ${client}, EN Spa here - your couples massage today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
     }
 
-    return `Good Morning ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your couples massage today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
+    return `${greeting} ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your couples massage today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
   }
 
   if (appointment.clientType === "Returning Client") {
-    return `Good Morning ${client}, EN Spa here - your session today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
+    return `${greeting} ${client}, EN Spa here - your session today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
   }
 
-  return `Good Morning ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your session today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
+  return `${greeting} ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your session today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
 }
 
 export default function EnSpaDailyClientTextGenerator() {
@@ -117,6 +125,7 @@ export default function EnSpaDailyClientTextGenerator() {
       clientName: "Matthew",
       clientType: "New Client",
       appointmentType: "Standard",
+      greetingTime: "Morning",
       practitioner: "Rebecca",
       secondPractitioner: "Peter",
       suite: "Suite #1",
@@ -251,7 +260,7 @@ export default function EnSpaDailyClientTextGenerator() {
                     )}
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-4">
+                  <div className="grid gap-3 md:grid-cols-5">
                     <label className="space-y-1 md:col-span-1">
                       <span className="text-sm font-medium text-stone-600">Client name</span>
                       <input
@@ -289,6 +298,24 @@ export default function EnSpaDailyClientTextGenerator() {
                       >
                         <option value="Standard">Standard</option>
                         <option value="Couples Massage">Couples Massage</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 md:col-span-1">
+                      <span className="text-sm font-medium text-stone-600">
+                        Greeting
+                    </span>
+                    </label>
+                    <label className="space-y-1 md:col-span-1">
+                      <span className="text-sm font-medium text-stone-600">Greeting Time</span>
+                      <select
+                        value={appointment.greetingTime}
+                        onChange={(e) =>
+                          updateAppointment(index, "greetingTime", e.target.value)
+                        }
+                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                      >
+                        <option value="Morning">Morning</option>
+                        <option value="Afternoon">Afternoon</option>
                       </select>
                     </label>
 
