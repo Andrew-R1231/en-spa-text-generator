@@ -2,8 +2,11 @@
 
 import React, { useMemo, useState } from "react";
 import {
+  CalendarDays,
   Copy,
+  LogOut,
   Plus,
+  RefreshCw,
   Trash2,
   MessageSquare,
   Image as ImageIcon,
@@ -53,7 +56,9 @@ type ClientType = "New Client" | "Returning Client";
 type AppointmentType = "Standard" | "Couples Massage";
 
 type Appointment = {
+  appointmentId?: string;
   clientName: string;
+  mobilePhone: string;
   clientType: ClientType;
   appointmentType: AppointmentType;
   greetingTime: "Morning" | "Afternoon";
@@ -61,10 +66,12 @@ type Appointment = {
   secondPractitioner: string;
   suite: string;
   time: string;
+  serviceSummary: string;
 };
 
 const blankAppointment: Appointment = {
   clientName: "",
+  mobilePhone: "",
   clientType: "New Client",
   appointmentType: "Standard",
   greetingTime: "Morning",
@@ -72,7 +79,25 @@ const blankAppointment: Appointment = {
   secondPractitioner: "Liann",
   suite: "Suite #1",
   time: "",
+  serviceSummary: "",
 };
+
+type BoulevardImportResponse = {
+  date: string;
+  locationName: string;
+  timeZone: string;
+  appointments: Appointment[];
+  error?: string;
+};
+
+function todayInBoise() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Boise",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
 
 function formatPractitioners(appointment: Appointment) {
   if (appointment.appointmentType === "Couples Massage") {
@@ -123,6 +148,7 @@ export default function EnSpaDailyClientTextGenerator() {
   const [appointments, setAppointments] = useState<Appointment[]>([
     {
       clientName: "Matthew",
+      mobilePhone: "",
       clientType: "New Client",
       appointmentType: "Standard",
       greetingTime: "Morning",
@@ -130,6 +156,7 @@ export default function EnSpaDailyClientTextGenerator() {
       secondPractitioner: "Peter",
       suite: "Suite #1",
       time: "",
+      serviceSummary: "",
     },
   ]);
 
@@ -138,6 +165,10 @@ export default function EnSpaDailyClientTextGenerator() {
   );
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [copiedImageIndex, setCopiedImageIndex] = useState<number | null>(null);
+  const [importDate, setImportDate] = useState(todayInBoise);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+  const [importError, setImportError] = useState("");
 
   const suites = Object.keys(suiteInfo);
 
@@ -183,6 +214,40 @@ export default function EnSpaDailyClientTextGenerator() {
     setAppointments((items) => items.filter((_, i) => i !== index));
   }
 
+  async function importBoulevardDay() {
+    setImporting(true);
+    setImportMessage("");
+    setImportError("");
+
+    try {
+      const response = await fetch(
+        `/api/boulevard/appointments?date=${encodeURIComponent(importDate)}`,
+        { cache: "no-store" },
+      );
+      const result = (await response.json()) as BoulevardImportResponse;
+
+      if (response.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
+      if (!response.ok) {
+        setImportError(result.error || "Unable to import Boulevard appointments.");
+        return;
+      }
+
+      setAppointments(result.appointments);
+      setImportMessage(
+        result.appointments.length === 1
+          ? `Imported 1 appointment from ${result.locationName}.`
+          : `Imported ${result.appointments.length} appointments from ${result.locationName}.`,
+      );
+    } catch {
+      setImportError("Unable to reach Boulevard. Please try again.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function copyText(text: string, index: number) {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
@@ -214,7 +279,8 @@ export default function EnSpaDailyClientTextGenerator() {
     <div className="min-h-screen bg-stone-50 p-4 text-stone-900 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="rounded-3xl bg-white p-6 shadow-sm md:p-8">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-sm font-medium uppercase tracking-wide text-stone-500">
                 EN Spa Operations
@@ -226,13 +292,69 @@ export default function EnSpaDailyClientTextGenerator() {
                 Add each scheduled client, choose the client type, appointment type, practitioner, and suite, then copy the personalized message and matching suite image.
               </p>
             </div>
-            <Button onClick={addAppointment} className="rounded-2xl">
-              <Plus className="mr-2 h-4 w-4" /> Add Client
-            </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={addAppointment} className="rounded-2xl">
+                  <Plus className="mr-2 h-4 w-4" /> Add Client
+                </Button>
+                <form action="/api/auth/logout" method="post">
+                  <Button type="submit" variant="outline" className="rounded-2xl">
+                    <LogOut className="mr-2 h-4 w-4" /> Sign out
+                  </Button>
+                </form>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="space-y-1">
+                  <span className="flex items-center gap-2 text-sm font-medium text-stone-700">
+                    <CalendarDays className="h-4 w-4" />
+                    Boulevard calendar date
+                  </span>
+                  <input
+                    type="date"
+                    value={importDate}
+                    onChange={(event) => setImportDate(event.target.value)}
+                    className="rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                  />
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={importBoulevardDay}
+                  disabled={importing || !importDate}
+                  className="rounded-2xl"
+                >
+                  <RefreshCw
+                    className={`mr-2 h-4 w-4 ${importing ? "animate-spin" : ""}`}
+                  />
+                  {importing ? "Importing…" : "Import Boulevard Day"}
+                </Button>
+              </div>
+              {importMessage && (
+                <p className="mt-3 text-sm text-emerald-700">{importMessage}</p>
+              )}
+              {importError && (
+                <p role="alert" className="mt-3 text-sm text-red-700">
+                  {importError}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-stone-500">
+                Importing replaces the cards below. You can still edit every
+                imported field before copying a message.
+              </p>
+            </div>
           </div>
         </div>
 
         <div className="space-y-4">
+          {appointments.length === 0 && (
+            <Card className="rounded-3xl border-stone-200 shadow-sm">
+              <CardContent className="p-8 text-center text-stone-600">
+                No active Boulevard appointments were found for this date.
+              </CardContent>
+            </Card>
+          )}
           {appointments.map((appointment, index) => {
             const text = generated[index];
             const suiteName =
@@ -241,7 +363,10 @@ export default function EnSpaDailyClientTextGenerator() {
             const isCouplesMassage = appointment.appointmentType === "Couples Massage";
 
             return (
-              <Card key={index} className="rounded-3xl border-stone-200 shadow-sm">
+              <Card
+                key={appointment.appointmentId || index}
+                className="rounded-3xl border-stone-200 shadow-sm"
+              >
                 <CardContent className="space-y-4 p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -259,6 +384,22 @@ export default function EnSpaDailyClientTextGenerator() {
                       </Button>
                     )}
                   </div>
+
+                  {(appointment.mobilePhone || appointment.serviceSummary) && (
+                    <div className="flex flex-col gap-1 rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-600 sm:flex-row sm:items-center sm:justify-between">
+                      <span>
+                        {appointment.serviceSummary || "Boulevard appointment"}
+                      </span>
+                      {appointment.mobilePhone && (
+                        <a
+                          href={`sms:${appointment.mobilePhone}`}
+                          className="font-medium text-stone-900 underline decoration-stone-300 underline-offset-4"
+                        >
+                          {appointment.mobilePhone}
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid gap-3 md:grid-cols-5">
                     <label className="space-y-1 md:col-span-1">
@@ -342,7 +483,9 @@ export default function EnSpaDailyClientTextGenerator() {
                         }
                         className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                       >
-                        {PRACTITIONERS.map((name) => (
+                        {Array.from(
+                          new Set([...PRACTITIONERS, appointment.practitioner].filter(Boolean)),
+                        ).map((name) => (
                           <option key={name} value={name}>
                             {name}
                           </option>
@@ -362,7 +505,14 @@ export default function EnSpaDailyClientTextGenerator() {
                           }
                           className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                         >
-                          {PRACTITIONERS.map((name) => (
+                          {Array.from(
+                            new Set(
+                              [
+                                ...PRACTITIONERS,
+                                appointment.secondPractitioner,
+                              ].filter(Boolean),
+                            ),
+                          ).map((name) => (
                             <option key={name} value={name}>
                               {name}
                             </option>

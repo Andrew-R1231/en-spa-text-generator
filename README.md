@@ -1,4 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EN Spa Operations
+
+Internal EN Spa tools for preparing daily client text messages.
+
+## Security and Boulevard setup
+
+The deployed app is protected by a staff password. Boulevard appointment data
+is retrieved only by a server-side route and is never cached.
+
+Copy `.env.example` to `.env.local` for local development. Configure the same
+values in Vercel for production:
+
+- `OPS_ACCESS_PASSWORD`: a long, unique staff password
+- `OPS_SESSION_SECRET`: a separate random value used to sign eight-hour sessions
+- `BLVD_BUSINESS_ID`
+- `BLVD_ADMIN_API_KEY`
+- `BLVD_ADMIN_SECRET_KEY`
+- `BLVD_API_VERSION` (currently `2020-01`)
+- `BLVD_LOCATION_ID` only when the business has more than one location
+
+Never prefix Boulevard credentials with `NEXT_PUBLIC_`, commit `.env.local`, or
+place credentials in browser code.
 
 ## Getting Started
 
@@ -14,9 +35,12 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and sign in with the staff
+password.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Use **Import Boulevard Day** to select a date and replace the manual cards with
+the active appointments scheduled for that day. Every imported field remains
+editable before its message is copied.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
