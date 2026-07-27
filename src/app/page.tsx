@@ -61,7 +61,7 @@ type Appointment = {
   mobilePhone: string;
   clientType: ClientType;
   appointmentType: AppointmentType;
-  greetingTime: "Morning" | "Afternoon";
+  greetingTime: "Morning" | "Afternoon" | "Hi";
   practitioner: string;
   secondPractitioner: string;
   suite: string;
@@ -119,15 +119,17 @@ function generateText(
   }
 ) {
   const greeting =
-  appointment.greetingTime === "Afternoon"
-    ? "Good Afternoon"
-    : "Good Morning";
+    appointment.greetingTime === "Hi"
+      ? "Hi"
+      : appointment.greetingTime === "Afternoon"
+        ? "Good Afternoon"
+        : "Good Morning";
   const client = appointment.clientName.trim() || "Client";
   const practitionerText = formatPractitioners(appointment);
   const suite = appointment.appointmentType === "Couples Massage" ? "Suite #4" : appointment.suite;
   const map = suiteInfo.mapUrl ? ` ${suiteInfo.mapUrl}` : "";
   const directions = suiteInfo.directions ? ` ${suiteInfo.directions}` : "";
-  const timeText = appointment.time ? ` for your ${appointment.time} session` : "";
+  const timeText = appointment.time ? ` at ${appointment.time}` : "";
 
   if (appointment.appointmentType === "Couples Massage") {
     if (appointment.clientType === "Returning Client") {
@@ -164,6 +166,7 @@ export default function EnSpaDailyClientTextGenerator() {
     DEFAULT_SUITES
   );
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [copiedPhoneIndex, setCopiedPhoneIndex] = useState<number | null>(null);
   const [copiedImageIndex, setCopiedImageIndex] = useState<number | null>(null);
   const [importDate, setImportDate] = useState(todayInBoise);
   const [importing, setImporting] = useState(false);
@@ -252,6 +255,12 @@ export default function EnSpaDailyClientTextGenerator() {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 1400);
+  }
+
+  async function copyPhoneNumber(phoneNumber: string, index: number) {
+    await navigator.clipboard.writeText(phoneNumber);
+    setCopiedPhoneIndex(index);
+    setTimeout(() => setCopiedPhoneIndex(null), 1400);
   }
 
   async function copyImage(imageUrl: string, index: number) {
@@ -391,12 +400,23 @@ export default function EnSpaDailyClientTextGenerator() {
                         {appointment.serviceSummary || "Boulevard appointment"}
                       </span>
                       {appointment.mobilePhone && (
-                        <a
-                          href={`sms:${appointment.mobilePhone}`}
-                          className="font-medium text-stone-900 underline decoration-stone-300 underline-offset-4"
-                        >
-                          {appointment.mobilePhone}
-                        </a>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-stone-900">
+                            {appointment.mobilePhone}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              copyPhoneNumber(appointment.mobilePhone, index)
+                            }
+                            className="h-8 rounded-xl"
+                          >
+                            <Copy className="mr-1.5 h-3.5 w-3.5" />
+                            {copiedPhoneIndex === index ? "Copied" : "Copy Number"}
+                          </Button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -442,12 +462,7 @@ export default function EnSpaDailyClientTextGenerator() {
                       </select>
                     </label>
                     <label className="space-y-1 md:col-span-1">
-                      <span className="text-sm font-medium text-stone-600">
-                        Greeting
-                    </span>
-                    </label>
-                    <label className="space-y-1 md:col-span-1">
-                      <span className="text-sm font-medium text-stone-600">Greeting Time</span>
+                      <span className="text-sm font-medium text-stone-600">Greeting</span>
                       <select
                         value={appointment.greetingTime}
                         onChange={(e) =>
@@ -457,6 +472,7 @@ export default function EnSpaDailyClientTextGenerator() {
                       >
                         <option value="Morning">Morning</option>
                         <option value="Afternoon">Afternoon</option>
+                        <option value="Hi">Hi</option>
                       </select>
                     </label>
 
