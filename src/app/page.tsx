@@ -126,7 +126,7 @@ function generateText(
         : "Good Morning";
   const client = appointment.clientName.trim() || "Client";
   const practitionerText = formatPractitioners(appointment);
-  const suite = appointment.appointmentType === "Couples Massage" ? "Suite #4" : appointment.suite;
+  const suite = appointment.suite;
   const map = suiteInfo.mapUrl ? ` ${suiteInfo.mapUrl}` : "";
   const directions = suiteInfo.directions ? ` ${suiteInfo.directions}` : "";
   const timeText = appointment.time ? ` at ${appointment.time}` : "";
@@ -178,7 +178,7 @@ export default function EnSpaDailyClientTextGenerator() {
   const generated = useMemo(
     () =>
       appointments.map((appt) => {
-        const suiteName = appt.appointmentType === "Couples Massage" ? "Suite #4" : appt.suite;
+        const suiteName = appt.suite;
         return generateText(appt, suiteInfo[suiteName] || suiteInfo["Suite #1"]);
       }),
     [appointments, suiteInfo]
@@ -188,22 +188,6 @@ export default function EnSpaDailyClientTextGenerator() {
     setAppointments((items) =>
       items.map((item, i) => {
         if (i !== index) return item;
-
-        if (field === "appointmentType" && value === "Couples Massage") {
-          return {
-            ...item,
-            appointmentType: "Couples Massage",
-            suite: "Suite #4",
-          };
-        }
-
-        if (field === "appointmentType" && value === "Standard") {
-          return {
-            ...item,
-            appointmentType: "Standard",
-          };
-        }
-
         return { ...item, [field]: value };
       })
     );
@@ -366,8 +350,7 @@ export default function EnSpaDailyClientTextGenerator() {
           )}
           {appointments.map((appointment, index) => {
             const text = generated[index];
-            const suiteName =
-              appointment.appointmentType === "Couples Massage" ? "Suite #4" : appointment.suite;
+            const suiteName = appointment.suite;
             const suite = suiteInfo[suiteName] || suiteInfo["Suite #1"];
             const isCouplesMassage = appointment.appointmentType === "Couples Massage";
 
@@ -541,9 +524,8 @@ export default function EnSpaDailyClientTextGenerator() {
                       <span className="text-sm font-medium text-stone-600">Suite</span>
                       <select
                         value={suiteName}
-                        disabled={isCouplesMassage}
                         onChange={(e) => updateAppointment(index, "suite", e.target.value)}
-                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500 disabled:bg-stone-100 disabled:text-stone-500"
+                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                       >
                         {suites.map((suiteOption) => (
                           <option key={suiteOption} value={suiteOption}>
@@ -551,11 +533,6 @@ export default function EnSpaDailyClientTextGenerator() {
                           </option>
                         ))}
                       </select>
-                      {isCouplesMassage && (
-                        <p className="text-xs text-stone-500">
-                          Couples massages are always assigned to Suite #4.
-                        </p>
-                      )}
                     </label>
                   </div>
 

@@ -290,17 +290,26 @@ function practitionerName(
   return staff.displayName || staff.firstName || staff.name || "";
 }
 
-function inferSuite(node: AppointmentNode, couples: boolean) {
-  const resourceNames = node.appointmentServiceResources.map(
-    ({ resource }) => resource.name,
-  );
-  if (resourceNames.some((name) => /suite\s*#?\s*4/i.test(name))) {
-    return "Suite #4";
+function inferSuite(node: AppointmentNode) {
+  const roomToSuite: Record<string, "Suite #1" | "Suite #4"> = {
+    "room 1": "Suite #1",
+    "room 2": "Suite #1",
+    "room 3": "Suite #1",
+    "couples room 3": "Suite #1",
+    "room 4": "Suite #4",
+    "couples room 4": "Suite #4",
+    "room 5": "Suite #4",
+    "room 6": "Suite #4",
+    "couples room 6": "Suite #4",
+  };
+
+  for (const { resource } of node.appointmentServiceResources) {
+    const resourceName = resource.name.trim().replace(/\s+/g, " ").toLowerCase();
+    const suite = roomToSuite[resourceName];
+    if (suite) return suite;
   }
-  if (resourceNames.some((name) => /suite\s*#?\s*1/i.test(name))) {
-    return "Suite #1";
-  }
-  return couples ? "Suite #4" : "Suite #1";
+
+  return "Suite #1";
 }
 
 function normalizeAppointment(
@@ -330,7 +339,7 @@ function normalizeAppointment(
     greetingTime: "Morning",
     practitioner: practitioners[0] || "",
     secondPractitioner: practitioners[1] || "",
-    suite: inferSuite(node, couples),
+    suite: inferSuite(node),
     time: new Intl.DateTimeFormat("en-US", {
       timeZone,
       hour: "numeric",
