@@ -13,6 +13,13 @@ connected Boulevard test; production rollout requires separate approval.
 
 ## Message and import behavior
 
+New and imported drafts default to Auto (Boise time): Good Morning before noon,
+Good Afternoon from noon until 6 p.m., and Hi afterward. This uses the current
+message-preparation time in America/Boise, not the appointment time or the device's
+timezone. Auto updates while the page is open and on return to the tab. Selecting
+Morning, Afternoon or Hi overrides Auto for that card; clock updates do not change
+manual selections. Reimporting replaces the cards and resets them to Auto.
+
 Rebecca is removed from practitioner choices. An imported appointment containing
 that name retains its observed practitioner in the draft and displays a review
 notice; the app never silently assigns a replacement practitioner.

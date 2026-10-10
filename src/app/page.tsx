@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useSyncExternalStore } from "react";
 import {
   CalendarDays,
   Copy,
@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  canCopyMessage, generateText, isRetiredPractitioner,
+  canCopyMessage, generateText, greetingInBoise, isRetiredPractitioner,
   needsSecondPractitioner, practitionerOptions, type Appointment,
 } from "@/lib/client-messages";
 
@@ -50,7 +50,7 @@ const blankAppointment: Appointment = {
   mobilePhone: "",
   clientType: "New Client",
   appointmentType: "Standard",
-  greetingTime: "Morning",
+  greetingTime: "Auto",
   practitioner: "Peter",
   secondPractitioner: "",
   suite: "Suite #1",
@@ -76,14 +76,32 @@ function todayInBoise() {
   }).format(new Date());
 }
 
+// Keep Auto current across noon/evening and when returning to a background tab.
+function subscribeToGreeting(onChange: () => void) {
+  const timer = window.setInterval(onChange, 30_000);
+  window.addEventListener("focus", onChange);
+  document.addEventListener("visibilitychange", onChange);
+  return () => {
+    window.clearInterval(timer);
+    window.removeEventListener("focus", onChange);
+    document.removeEventListener("visibilitychange", onChange);
+  };
+}
+const getGreetingSnapshot = () => greetingInBoise();
+// A stable server snapshot avoids build-time clock values and hydration mismatch.
+const getServerGreetingSnapshot = () => "Hi" as const;
+
 export default function EnSpaDailyClientTextGenerator() {
+  const autoGreeting = useSyncExternalStore(
+    subscribeToGreeting, getGreetingSnapshot, getServerGreetingSnapshot,
+  );
   const [appointments, setAppointments] = useState<Appointment[]>([
     {
       clientName: "Matthew",
       mobilePhone: "",
       clientType: "New Client",
       appointmentType: "Standard",
-      greetingTime: "Morning",
+      greetingTime: "Auto",
       practitioner: "Peter",
       secondPractitioner: "",
       suite: "Suite #1",
@@ -110,9 +128,11 @@ export default function EnSpaDailyClientTextGenerator() {
     () =>
       appointments.map((appt) => {
         const suiteName = appt.suite;
-        return generateText(appt, suiteInfo[suiteName] || suiteInfo["Suite #1"]);
+        return generateText({ ...appt,
+          greetingTime: appt.greetingTime === "Auto" ? autoGreeting : appt.greetingTime,
+        }, suiteInfo[suiteName] || suiteInfo["Suite #1"]);
       }),
-    [appointments, suiteInfo]
+    [appointments, suiteInfo, autoGreeting]
   );
 
   function updateAppointment(index: number, field: keyof Appointment, value: string) {
@@ -398,10 +418,12 @@ export default function EnSpaDailyClientTextGenerator() {
                         }
                         className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                       >
+                        <option value="Auto">Auto (Boise time)</option>
                         <option value="Morning">Morning</option>
                         <option value="Afternoon">Afternoon</option>
                         <option value="Hi">Hi</option>
                       </select>
+                      <p className="text-xs text-stone-500">Auto uses the current Boise time, not the appointment time. Choose another greeting to override.</p>
                     </label>
 
                     <label className="space-y-1 md:col-span-1">

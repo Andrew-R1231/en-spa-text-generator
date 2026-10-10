@@ -9,6 +9,15 @@ export type AppointmentType =
   | "Massage & Facial Experience"
   | "Combined Experience";
 export type IntakeStatus = "Unknown" | "Complete" | "Incomplete";
+export type ManualGreeting = "Morning" | "Afternoon" | "Hi";
+
+export function greetingInBoise(now: Date = new Date()): ManualGreeting {
+  if (!Number.isFinite(now.getTime())) return "Hi";
+  const hour = Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Boise", hour: "numeric", hourCycle: "h23",
+  }).format(now));
+  return hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Hi";
+}
 
 export type Appointment = {
   appointmentId?: string;
@@ -16,7 +25,7 @@ export type Appointment = {
   mobilePhone: string;
   clientType: "New Client" | "Returning Client";
   appointmentType: AppointmentType;
-  greetingTime: "Morning" | "Afternoon" | "Hi";
+  greetingTime: "Auto" | ManualGreeting;
   practitioner: string;
   secondPractitioner: string;
   suite: string;
@@ -63,9 +72,10 @@ export function canCopyMessage(appointment: Appointment) {
       appointment.practitioner.trim().toLowerCase() !== appointment.secondPractitioner.trim().toLowerCase());
 }
 
-export function generateText(appointment: Appointment, suiteInfo: SuiteInfo) {
-  const greeting = appointment.greetingTime === "Hi" ? "Hi" :
-    appointment.greetingTime === "Afternoon" ? "Good Afternoon" : "Good Morning";
+export function generateText(appointment: Appointment, suiteInfo: SuiteInfo, now?: Date) {
+  const choice = appointment.greetingTime === "Auto" ? greetingInBoise(now) : appointment.greetingTime;
+  const greeting = choice === "Hi" ? "Hi" :
+    choice === "Afternoon" ? "Good Afternoon" : "Good Morning";
   const client = appointment.clientName.trim() || "Client";
   const names = Array.from(new Set([
     appointment.practitioner.trim(),

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  canCopyMessage, generateText, INTAKE_REMINDER, GUEST_2_CONTACT_REQUEST, PRACTITIONERS,
+  canCopyMessage, generateText, greetingInBoise, INTAKE_REMINDER, GUEST_2_CONTACT_REQUEST, PRACTITIONERS,
   needsSecondPractitioner, practitionerOptions, type Appointment,
 } from "../src/lib/client-messages.ts";
 import {
@@ -36,6 +36,47 @@ function fixture(id: string, guest = 1, room = 6, practitioner = "Peter"): Appoi
 
 function pair() { return [fixture("a", 1, 6, "Peter"), fixture("b", 2, 6, "Mindy")]; }
 const imported = (nodes: AppointmentNode[]) => normalizeDailyAppointments(nodes, "America/Boise");
+
+for (const [instant, expected] of [
+  ["2026-10-10T06:00:00Z", "Morning"], // Midnight MDT.
+  ["2026-10-10T17:59:59Z", "Morning"],
+  ["2026-10-10T18:00:00Z", "Afternoon"],
+  ["2026-10-10T23:59:59Z", "Afternoon"],
+  ["2026-10-11T00:00:00Z", "Hi"],
+  ["2026-10-11T05:59:59Z", "Hi"],
+  ["2026-01-10T18:59:59Z", "Morning"], // Winter MST.
+  ["2026-01-10T19:00:00Z", "Afternoon"],
+  ["2026-01-11T01:00:00Z", "Hi"],
+  ["2026-03-08T09:00:00Z", "Morning"], // Spring clock change.
+  ["2026-11-01T08:30:00Z", "Morning"], // Fall repeated hour.
+] as const) {
+  test(`Boise greeting at ${instant} is ${expected}`, () => {
+    assert.equal(greetingInBoise(new Date(instant)), expected);
+  });
+}
+
+test("invalid clock safely uses a neutral greeting", () => {
+  assert.equal(greetingInBoise(new Date(NaN)), "Hi");
+});
+
+test("imports default to Auto independently of appointment time and location timezone", () => {
+  assert.ok(normalizeDailyAppointments(pair(), "America/New_York").every(
+    (appointment) => appointment.greetingTime === "Auto"));
+});
+
+test("Auto draft follows preparation time while manual greeting overrides remain unchanged", () => {
+  const morning = new Date("2026-10-10T17:00:00Z");
+  const afternoon = new Date("2026-10-10T20:00:00Z");
+  const evening = new Date("2026-10-11T01:00:00Z");
+  assert.match(generateText({ ...manual, greetingTime: "Auto", time: "7:00 PM" }, suite, morning), /^Good Morning/);
+  assert.match(generateText({ ...manual, greetingTime: "Auto" }, suite, afternoon), /^Good Afternoon/);
+  assert.match(generateText({ ...manual, greetingTime: "Auto" }, suite, evening), /^Hi /);
+  for (const now of [morning, afternoon, evening]) {
+    assert.match(generateText({ ...manual, greetingTime: "Morning" }, suite, now), /^Good Morning/);
+    assert.match(generateText({ ...manual, greetingTime: "Afternoon" }, suite, now), /^Good Afternoon/);
+    assert.match(generateText({ ...manual, greetingTime: "Hi" }, suite, now), /^Hi /);
+  }
+});
 
 test("Rebecca is not a selectable practitioner, including imported full-name variants", () => {
   assert.ok(!PRACTITIONERS.includes("Rebecca"));

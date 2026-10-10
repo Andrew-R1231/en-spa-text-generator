@@ -6,6 +6,13 @@ import { readFileSync } from "node:fs";
 const html = readFileSync(new URL("../.next/server/app/index.html", import.meta.url), "utf8");
 const selects = [...html.matchAll(/<select\b[^>]*>([\s\S]*?)<\/select>/g)].map((match) => match[1]);
 
+test("built UI defaults to Auto greeting and retains all manual overrides", () => {
+  assert.ok(selects.some((select) => /value="Auto"[^>]*selected/.test(select) &&
+    select.includes('value="Morning"') && select.includes('value="Afternoon"') &&
+    select.includes('value="Hi"')));
+  assert.match(html, /current Boise time, not the appointment time/);
+});
+
 test("built UI offers explicit intake verification and complete or incomplete overrides", () => {
   assert.ok(selects.some((select) => select.includes('value="Unknown"') &&
     select.includes('Needs verification') && select.includes('value="Complete"') &&

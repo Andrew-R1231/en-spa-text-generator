@@ -95,7 +95,7 @@ function normalizeAppointment(node: AppointmentNode, timeZone: string): Appointm
     mobilePhone: node.client.mobilePhone || "",
     clientType: node.client.appointmentCount <= 1 ? "New Client" : "Returning Client",
     appointmentType: classifyAppointment(node),
-    greetingTime: "Morning",
+    greetingTime: "Auto",
     // Guest roles, not the provider's array order, identify the grouped booking's staff.
     practitioner: couples?.name || practitioners[0] || "",
     secondPractitioner: couples?.embeddedPartner?.name || practitioners[1] || "",
