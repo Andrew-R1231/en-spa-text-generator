@@ -13,17 +13,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-
-const PRACTITIONERS = [
-  "Peter",
-  "Liann",
-  "Mindy",
-  "Tiffany",
-  "Rebecca",
-  "Stephanie",
-  "Mina",
-  "Meghan",
-];
+import {
+  canCopyMessage, generateText, isRetiredPractitioner,
+  needsSecondPractitioner, practitionerOptions, type Appointment,
+} from "@/lib/client-messages";
 
 const DEFAULT_SUITES: Record<
   string,
@@ -52,23 +45,6 @@ const DEFAULT_SUITES: Record<
   },
 };
 
-type ClientType = "New Client" | "Returning Client";
-type AppointmentType = "Standard" | "Couples Massage";
-
-type Appointment = {
-  appointmentId?: string;
-  clientName: string;
-  mobilePhone: string;
-  clientType: ClientType;
-  appointmentType: AppointmentType;
-  greetingTime: "Morning" | "Afternoon" | "Hi";
-  practitioner: string;
-  secondPractitioner: string;
-  suite: string;
-  time: string;
-  serviceSummary: string;
-};
-
 const blankAppointment: Appointment = {
   clientName: "",
   mobilePhone: "",
@@ -76,10 +52,11 @@ const blankAppointment: Appointment = {
   appointmentType: "Standard",
   greetingTime: "Morning",
   practitioner: "Peter",
-  secondPractitioner: "Liann",
+  secondPractitioner: "",
   suite: "Suite #1",
   time: "",
   serviceSummary: "",
+  intakeStatus: "Unknown",
 };
 
 type BoulevardImportResponse = {
@@ -99,53 +76,6 @@ function todayInBoise() {
   }).format(new Date());
 }
 
-function formatPractitioners(appointment: Appointment) {
-  if (appointment.appointmentType === "Couples Massage") {
-    const first = appointment.practitioner || "your first practitioner";
-    const second = appointment.secondPractitioner || "your second practitioner";
-    return `${first} and ${second}`;
-  }
-
-  return appointment.practitioner || "your practitioner";
-}
-
-function generateText(
-  appointment: Appointment,
-  suiteInfo: {
-    mapUrl: string;
-    directions: string;
-    imageLabel: string;
-    imageUrl: string;
-  }
-) {
-  const greeting =
-    appointment.greetingTime === "Hi"
-      ? "Hi"
-      : appointment.greetingTime === "Afternoon"
-        ? "Good Afternoon"
-        : "Good Morning";
-  const client = appointment.clientName.trim() || "Client";
-  const practitionerText = formatPractitioners(appointment);
-  const suite = appointment.suite;
-  const map = suiteInfo.mapUrl ? ` ${suiteInfo.mapUrl}` : "";
-  const directions = suiteInfo.directions ? ` ${suiteInfo.directions}` : "";
-  const timeText = appointment.time ? ` at ${appointment.time}` : "";
-
-  if (appointment.appointmentType === "Couples Massage") {
-    if (appointment.clientType === "Returning Client") {
-      return `${greeting} ${client}, EN Spa here - your couples massage today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
-    }
-
-    return `${greeting} ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your couples massage today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
-  }
-
-  if (appointment.clientType === "Returning Client") {
-    return `${greeting} ${client}, EN Spa here - your session today${timeText} with ${practitionerText} is in ${suite}. ${map} Thank you - we’ll see you soon!`;
-  }
-
-  return `${greeting} ${client}, EN Spa here - just to clarify (the auto text might be a little confusing), your session today${timeText} with ${practitionerText} is in ${suite}.${map}${directions} Thank you - we’ll see you soon!`;
-}
-
 export default function EnSpaDailyClientTextGenerator() {
   const [appointments, setAppointments] = useState<Appointment[]>([
     {
@@ -154,11 +84,12 @@ export default function EnSpaDailyClientTextGenerator() {
       clientType: "New Client",
       appointmentType: "Standard",
       greetingTime: "Morning",
-      practitioner: "Rebecca",
-      secondPractitioner: "Peter",
+      practitioner: "Peter",
+      secondPractitioner: "",
       suite: "Suite #1",
       time: "",
       serviceSummary: "",
+      intakeStatus: "Unknown",
     },
   ]);
 
@@ -353,6 +284,8 @@ export default function EnSpaDailyClientTextGenerator() {
             const suiteName = appointment.suite;
             const suite = suiteInfo[suiteName] || suiteInfo["Suite #1"];
             const isCouplesMassage = appointment.appointmentType === "Couples Massage";
+            const showSecondPractitioner = needsSecondPractitioner(appointment);
+            const messageReady = canCopyMessage(appointment);
 
             return (
               <Card
@@ -442,6 +375,8 @@ export default function EnSpaDailyClientTextGenerator() {
                       >
                         <option value="Standard">Standard</option>
                         <option value="Couples Massage">Couples Massage</option>
+                        <option value="Massage & Facial Experience">Massage &amp; Facial Experience</option>
+                        <option value="Combined Experience">Combined Experience</option>
                       </select>
                     </label>
                     <label className="space-y-1 md:col-span-1">
@@ -473,18 +408,17 @@ export default function EnSpaDailyClientTextGenerator() {
                   <div className="grid gap-3 md:grid-cols-3">
                     <label className="space-y-1 md:col-span-1">
                       <span className="text-sm font-medium text-stone-600">
-                        {isCouplesMassage ? "Practitioner 1" : "Practitioner"}
+                        {showSecondPractitioner ? "Practitioner 1" : "Practitioner"}
                       </span>
                       <select
-                        value={appointment.practitioner}
+                        value={isRetiredPractitioner(appointment.practitioner) ? "" : appointment.practitioner}
                         onChange={(e) =>
                           updateAppointment(index, "practitioner", e.target.value)
                         }
                         className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                       >
-                        {Array.from(
-                          new Set([...PRACTITIONERS, appointment.practitioner].filter(Boolean)),
-                        ).map((name) => (
+                        <option value="">Choose practitioner</option>
+                        {practitionerOptions(appointment.practitioner).map((name) => (
                           <option key={name} value={name}>
                             {name}
                           </option>
@@ -492,26 +426,20 @@ export default function EnSpaDailyClientTextGenerator() {
                       </select>
                     </label>
 
-                    {isCouplesMassage && (
+                    {showSecondPractitioner && (
                       <label className="space-y-1 md:col-span-1">
                         <span className="text-sm font-medium text-stone-600">
                           Practitioner 2
                         </span>
                         <select
-                          value={appointment.secondPractitioner}
+                          value={isRetiredPractitioner(appointment.secondPractitioner) ? "" : appointment.secondPractitioner}
                           onChange={(e) =>
                             updateAppointment(index, "secondPractitioner", e.target.value)
                           }
                           className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                         >
-                          {Array.from(
-                            new Set(
-                              [
-                                ...PRACTITIONERS,
-                                appointment.secondPractitioner,
-                              ].filter(Boolean),
-                            ),
-                          ).map((name) => (
+                          <option value="">Choose practitioner</option>
+                          {practitionerOptions(appointment.secondPractitioner).map((name) => (
                             <option key={name} value={name}>
                               {name}
                             </option>
@@ -534,7 +462,41 @@ export default function EnSpaDailyClientTextGenerator() {
                         ))}
                       </select>
                     </label>
+                    <label className="space-y-1 md:col-span-1">
+                      <span className="text-sm font-medium text-stone-600">Intake form</span>
+                      <select
+                        value={appointment.intakeStatus || "Unknown"}
+                        onChange={(e) => updateAppointment(index, "intakeStatus", e.target.value)}
+                        className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                      >
+                        <option value="Unknown">Unknown / not checked</option>
+                        <option value="Complete">Complete — no reminder</option>
+                        <option value="Incomplete">Incomplete — include reminder</option>
+                      </select>
+                    </label>
                   </div>
+
+                  {typeof appointment.pendingFormCount === "number" && (
+                    <p className="text-xs text-stone-500">
+                      Boulevard reports {appointment.pendingFormCount} pending form(s). This includes all
+                      pending forms; verify the intake status and adjust it above if needed.
+                    </p>
+                  )}
+                  {(isRetiredPractitioner(appointment.practitioner) ||
+                    isRetiredPractitioner(appointment.secondPractitioner)) && (
+                    <p className="text-sm text-amber-800">
+                      An imported practitioner is Rebecca. The imported name is preserved in the draft,
+                      but Rebecca is no longer a dropdown choice. Verify the appointment before changing it.
+                    </p>
+                  )}
+                  {appointment.importWarnings?.map((warning) => (
+                    <p key={warning} className="text-xs text-stone-500">Import note: {warning}</p>
+                  ))}
+                  {isCouplesMassage && !messageReady && (
+                    <p role="alert" className="text-sm text-amber-800">
+                      Verify both practitioner names before copying this couples message.
+                    </p>
+                  )}
 
                   <div className="rounded-2xl bg-stone-100 p-4">
                     <p className="whitespace-pre-wrap text-sm leading-6 text-stone-800">
@@ -555,7 +517,7 @@ export default function EnSpaDailyClientTextGenerator() {
                         <span>Attach image: {suite.imageLabel}</span>
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button onClick={() => copyText(text, index)} className="rounded-2xl">
+                        <Button onClick={() => copyText(text, index)} disabled={!messageReady} className="rounded-2xl">
                           <Copy className="mr-2 h-4 w-4" />
                           {copiedIndex === index ? "Copied" : "Copy Text"}
                         </Button>

@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:built": "node --experimental-strip-types --test checks/*.test.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

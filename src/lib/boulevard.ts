@@ -1,38 +1,10 @@
 import "server-only";
+import { normalizeDailyAppointments, type AppointmentNode } from "./appointment-import";
+import type { Appointment } from "./client-messages";
 
 type BoulevardGraphQLResponse<TData> = {
   data?: TData;
   errors?: Array<{ message: string }>;
-};
-
-type AppointmentNode = {
-  id: string;
-  startAt: string;
-  endAt: string;
-  cancelled: boolean;
-  isGroupedAppointment: boolean;
-  client: {
-    firstName: string | null;
-    lastName: string | null;
-    mobilePhone: string | null;
-    appointmentCount: number;
-  };
-  appointmentServices: Array<{
-    id: string;
-    startAt: string;
-    staff: {
-      displayName: string;
-      firstName: string;
-      name: string;
-    };
-    service: {
-      name: string;
-      category: { name: string } | null;
-    };
-  }>;
-  appointmentServiceResources: Array<{
-    resource: { name: string };
-  }>;
 };
 
 type LocationsResponse = {
@@ -50,19 +22,7 @@ type AppointmentsResponse = {
   };
 };
 
-export type ImportedBoulevardAppointment = {
-  appointmentId: string;
-  clientName: string;
-  mobilePhone: string;
-  clientType: "New Client" | "Returning Client";
-  appointmentType: "Standard" | "Couples Massage";
-  greetingTime: "Morning" | "Afternoon";
-  practitioner: string;
-  secondPractitioner: string;
-  suite: string;
-  time: string;
-  serviceSummary: string;
-};
+export type ImportedBoulevardAppointment = Appointment;
 
 export type DailyAppointmentImport = {
   date: string;
@@ -94,10 +54,12 @@ const APPOINTMENTS_QUERY = `
       edges {
         node {
           id
+          clientId
           startAt
           endAt
           cancelled
           isGroupedAppointment
+          pendingFormCount
           client {
             firstName
             lastName
@@ -107,7 +69,7 @@ const APPOINTMENTS_QUERY = `
           appointmentServices {
             id
             startAt
-            staff { displayName firstName name }
+            staff { id displayName firstName name }
             service { name category { name } }
           }
           appointmentServiceResources {
@@ -284,71 +246,6 @@ function getDateRange(date: string, timeZone: string) {
   };
 }
 
-function practitionerName(
-  staff: AppointmentNode["appointmentServices"][number]["staff"],
-) {
-  return staff.displayName || staff.firstName || staff.name || "";
-}
-
-function inferSuite(node: AppointmentNode) {
-  const roomToSuite: Record<string, "Suite #1" | "Suite #4"> = {
-    "room 1": "Suite #1",
-    "room 2": "Suite #1",
-    "room 3": "Suite #1",
-    "couples room 3": "Suite #1",
-    "room 4": "Suite #4",
-    "couples room 4": "Suite #4",
-    "room 5": "Suite #4",
-    "room 6": "Suite #4",
-    "couples room 6": "Suite #4",
-  };
-
-  for (const { resource } of node.appointmentServiceResources) {
-    const resourceName = resource.name.trim().replace(/\s+/g, " ").toLowerCase();
-    const suite = roomToSuite[resourceName];
-    if (suite) return suite;
-  }
-
-  return "Suite #1";
-}
-
-function normalizeAppointment(
-  node: AppointmentNode,
-  timeZone: string,
-): ImportedBoulevardAppointment {
-  const services = node.appointmentServices.map(({ service }) => service.name);
-  const practitioners = Array.from(
-    new Set(
-      node.appointmentServices
-        .map(({ staff }) => practitionerName(staff))
-        .filter(Boolean),
-    ),
-  );
-  const couples =
-    node.isGroupedAppointment ||
-    services.some((name) => /couples?/i.test(name)) ||
-    practitioners.length > 1;
-
-  return {
-    appointmentId: node.id,
-    clientName: node.client.firstName || node.client.lastName || "Client",
-    mobilePhone: node.client.mobilePhone || "",
-    clientType:
-      node.client.appointmentCount <= 1 ? "New Client" : "Returning Client",
-    appointmentType: couples ? "Couples Massage" : "Standard",
-    greetingTime: "Morning",
-    practitioner: practitioners[0] || "",
-    secondPractitioner: practitioners[1] || "",
-    suite: inferSuite(node),
-    time: new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(node.startAt)),
-    serviceSummary: services.join(" + "),
-  };
-}
-
 export async function getDailyBoulevardAppointments(
   date: string,
 ): Promise<DailyAppointmentImport> {
@@ -398,8 +295,6 @@ export async function getDailyBoulevardAppointments(
     date,
     locationName: location.name,
     timeZone: location.tz,
-    appointments: nodes
-      .sort((left, right) => left.startAt.localeCompare(right.startAt))
-      .map((node) => normalizeAppointment(node, location.tz)),
+    appointments: normalizeDailyAppointments(nodes, location.tz),
   };
 }
