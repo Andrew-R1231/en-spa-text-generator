@@ -6,14 +6,19 @@ import { readFileSync } from "node:fs";
 const html = readFileSync(new URL("../.next/server/app/index.html", import.meta.url), "utf8");
 const selects = [...html.matchAll(/<select\b[^>]*>([\s\S]*?)<\/select>/g)].map((match) => match[1]);
 
-test("built UI offers an editable unknown, complete and incomplete form status", () => {
+test("built UI offers explicit intake verification and complete or incomplete overrides", () => {
   assert.ok(selects.some((select) => select.includes('value="Unknown"') &&
-    select.includes('value="Complete"') && select.includes('value="Incomplete"')));
+    select.includes('Needs verification') && select.includes('value="Complete"') &&
+    select.includes('value="Incomplete"')));
 });
 
 test("built UI offers both combined experience options", () => {
   assert.ok(selects.some((select) => select.includes('value="Massage &amp; Facial Experience"') &&
     select.includes('value="Combined Experience"')));
+});
+
+test("built UI offers a separate facial type", () => {
+  assert.ok(selects.some((select) => select.includes('value="Facial"')));
 });
 
 test("built practitioner dropdown excludes Rebecca", () => {

@@ -286,6 +286,8 @@ export default function EnSpaDailyClientTextGenerator() {
             const isCouplesMassage = appointment.appointmentType === "Couples Massage";
             const showSecondPractitioner = needsSecondPractitioner(appointment);
             const messageReady = canCopyMessage(appointment);
+            const couplesPartner = isCouplesMassage && appointment.partnerAppointmentId ?
+              appointments.find((other) => other.appointmentId === appointment.partnerAppointmentId) : undefined;
 
             return (
               <Card
@@ -337,6 +339,13 @@ export default function EnSpaDailyClientTextGenerator() {
                     </div>
                   )}
 
+                  {couplesPartner && (
+                    <p className="text-sm text-stone-600">
+                      Couples partner: {couplesPartner.clientName} (separate client card).
+                      Each text uses its own client’s contact details and intake review.
+                    </p>
+                  )}
+
                   <div className="grid gap-3 md:grid-cols-5">
                     <label className="space-y-1 md:col-span-1">
                       <span className="text-sm font-medium text-stone-600">Client name</span>
@@ -374,6 +383,7 @@ export default function EnSpaDailyClientTextGenerator() {
                         className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                       >
                         <option value="Standard">Standard</option>
+                        <option value="Facial">Facial</option>
                         <option value="Couples Massage">Couples Massage</option>
                         <option value="Massage & Facial Experience">Massage &amp; Facial Experience</option>
                         <option value="Combined Experience">Combined Experience</option>
@@ -469,17 +479,44 @@ export default function EnSpaDailyClientTextGenerator() {
                         onChange={(e) => updateAppointment(index, "intakeStatus", e.target.value)}
                         className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
                       >
-                        <option value="Unknown">Unknown / not checked</option>
+                        <option value="Unknown">Needs verification</option>
                         <option value="Complete">Complete — no reminder</option>
                         <option value="Incomplete">Incomplete — include reminder</option>
                       </select>
                     </label>
+                    {isCouplesMassage && (
+                      <label className="space-y-1 md:col-span-1">
+                        <span className="text-sm font-medium text-stone-600">Guest #2 profile</span>
+                        <select
+                          value={appointment.guest2ProfileStatus || "Unknown"}
+                          onChange={(e) => updateAppointment(index, "guest2ProfileStatus", e.target.value)}
+                          className="w-full rounded-2xl border border-stone-200 bg-white px-3 py-2 outline-none focus:border-stone-500"
+                        >
+                          <option value="Unknown">Needs verification — no contact request</option>
+                          <option value="Missing">Missing — request name and cell</option>
+                          <option value="Linked">Has separate profile — no contact request</option>
+                        </select>
+                      </label>
+                    )}
                   </div>
 
                   {typeof appointment.pendingFormCount === "number" && (
                     <p className="text-xs text-stone-500">
-                      Boulevard reports {appointment.pendingFormCount} pending form(s). This includes all
-                      pending forms; verify the intake status and adjust it above if needed.
+                      Boulevard reports {appointment.pendingFormCount} pending item(s). This aggregate count
+                      does not identify the intake form and is not used to set intake status.
+                    </p>
+                  )}
+                  {appointment.appointmentId && appointment.intakeStatus === "Unknown" && (
+                    <p role="alert" className="text-sm text-amber-800">
+                      Intake status needs verification. Check the applicable client intake form in Boulevard,
+                      not staff charts such as SOAP, and select Complete or Incomplete before copying.
+                      Review the draft’s intake wording before copying.
+                    </p>
+                  )}
+                  {isCouplesMassage && appointment.guest2ProfileStatus === "Missing" && (
+                    <p className="text-sm text-stone-600">
+                      No separate Guest #2 profile was found for this visit in the imported day,
+                      or staff selected Missing. Verify before copying; the draft requests their name and cell number.
                     </p>
                   )}
                   {(isRetiredPractitioner(appointment.practitioner) ||

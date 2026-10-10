@@ -4,6 +4,7 @@ export const PRACTITIONERS = [
 
 export type AppointmentType =
   | "Standard"
+  | "Facial"
   | "Couples Massage"
   | "Massage & Facial Experience"
   | "Combined Experience";
@@ -24,6 +25,7 @@ export type Appointment = {
   intakeStatus: IntakeStatus;
   pendingFormCount?: number | null;
   partnerAppointmentId?: string;
+  guest2ProfileStatus?: "Unknown" | "Missing" | "Linked";
   importWarnings?: string[];
 };
 
@@ -36,6 +38,8 @@ export type SuiteInfo = {
 
 export const INTAKE_REMINDER =
   "Also, please check that you have your online intake form filled out before you arrive, so that we can be sure to begin your session on time.";
+export const GUEST_2_CONTACT_REQUEST =
+  "Also, if we could get your Guest #2 name and cell number, we could text them the online intake form link for them to fill out before you arrive? If you both have your forms filled out beforehand, we can be sure to begin your session on time.";
 
 export function isRetiredPractitioner(name: string) {
   return /^rebecca(?:\s|$)/i.test(name.trim());
@@ -47,7 +51,9 @@ export function practitionerOptions(importedName: string) {
 }
 
 export function needsSecondPractitioner(appointment: Appointment) {
-  return appointment.appointmentType !== "Standard";
+  return appointment.appointmentType === "Couples Massage" ||
+    appointment.appointmentType === "Massage & Facial Experience" ||
+    appointment.appointmentType === "Combined Experience";
 }
 
 export function canCopyMessage(appointment: Appointment) {
@@ -68,13 +74,17 @@ export function generateText(appointment: Appointment, suiteInfo: SuiteInfo) {
   const practitioners = names.length ? names.join(" and ") : "your practitioner";
   const visit = appointment.appointmentType === "Couples Massage" ? "couples massage" :
     appointment.appointmentType === "Massage & Facial Experience" ? "Massage & Facial Experience" :
-    appointment.appointmentType === "Combined Experience" ? "combined experience" : "session";
+    appointment.appointmentType === "Combined Experience" ? "combined experience" :
+    appointment.appointmentType === "Facial" ? "facial session" : "session";
   const introduction = appointment.clientType === "New Client" ?
     "just to clarify (the auto text might be a little confusing), " : "";
   const time = appointment.time ? ` at ${appointment.time}` : "";
   const map = suiteInfo.mapUrl ? ` ${suiteInfo.mapUrl}` : "";
   const directions = appointment.clientType === "New Client" && suiteInfo.directions ?
     ` ${suiteInfo.directions}` : "";
-  const reminder = appointment.intakeStatus === "Incomplete" ? ` ${INTAKE_REMINDER}` : "";
+  const requestGuest2 = appointment.appointmentType === "Couples Massage" &&
+    appointment.guest2ProfileStatus === "Missing";
+  const reminder = requestGuest2 ? ` ${GUEST_2_CONTACT_REQUEST}` :
+    appointment.intakeStatus === "Incomplete" ? ` ${INTAKE_REMINDER}` : "";
   return `${greeting} ${client}, EN Spa here - ${introduction}your ${visit} today${time} with ${practitioners} is in ${appointment.suite}.${map}${directions}${reminder} Thank you - we’ll see you soon!`;
 }

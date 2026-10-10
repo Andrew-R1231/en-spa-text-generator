@@ -18,11 +18,37 @@ that name retains its observed practitioner in the draft and displays a review
 notice; the app never silently assigns a replacement practitioner.
 
 The Intake form selector controls the reminder immediately before the thank-you
-sentence. A positive `pendingFormCount` defaults to Incomplete, zero defaults to
-Complete, and an absent or invalid count stays Unknown. Boulevard defines this
-count as all remaining appointment forms, not specifically intake forms. Staff
-can override the selection after checking the appointment. No form contents or
-answers are requested. See the [Boulevard Appointment reference](https://developers.joinblvd.com/graphql-admin-api/api-reference/types/Appointment).
+sentence. Imported intake status defaults to Needs verification, regardless of
+`pendingFormCount`. That aggregate count does not identify the pending item and
+cannot establish intake completion. Its treatment of charts is not explicitly
+documented in the [legacy Appointment reference](https://developers.joinblvd.com/graphql-admin-api/api-reference/types/Appointment).
+Staff must check the applicable client intake, excluding staff charts such as
+SOAP, and select Complete or Incomplete before copying. Unknown drafts contain
+no individual incomplete-intake reminder and display a review warning; copying is
+not blocked by intake status. The separate Guest 2 contact request below can still
+appear when intake status is Unknown.
+Reimporting replaces all cards and manual selections. No form contents or answers
+are requested.
+
+### Intake metadata integration
+
+The local `intake-status.ts` evaluator provides tested rules for a future server
+adapter. It matches approved template IDs, excludes charts, checks current
+appointment applicability, and leaves missing or partial evidence Unknown.
+An outstanding intake requirement overrides an earlier submitted copy. An expired
+or archived copy alone does not establish completion. Titles help identify the
+templates during configuration; they are not used as a substitute for stable IDs.
+
+The evaluator is not connected to the live import. The current legacy query and
+credentials are unchanged. Boulevard's [2026-06 changelog](https://developers.joinblvd.com/2026-06/changelog)
+documents appointment `pendingFormTemplates(format:)` and `customForms` under
+`form:read`, with internal charts included only by the ALL pending-template filter.
+Connecting these fields requires the supported API/authentication setup and
+explicit approval to add `form:read`; the previously approved appointment scopes
+do not cover this access. Only template identification, form kind, completion and
+applicability metadata should be queried. Form answers and clinical notes are out
+of scope. Verify exact wire fields, enum meanings, expiration/reuse and staff
+review semantics in sandbox before mapping them into the internal contract.
 
 Separate couples appointments are paired only when they have an unambiguous
 mutual match on room number, exact service start instant and service-name family
@@ -35,11 +61,55 @@ leaves Practitioner 2 blank and disables Copy Text until staff verifies two
 different practitioner names. Each guest retains their own card, contact details
 and form status; no bookings are merged or modified.
 
+A grouped record containing exactly Guest 1 and Guest 2 can also link to a
+separate Guest 2 appointment created for a different client profile. Both service
+lines must agree on room, start instant and service family; the separate Guest 2
+record must agree with the grouped Guest 2 staff ID. Both client IDs must be
+present and different, and the match must be unique in both directions. Guest
+roles determine practitioner order even if the provider returns Guest 2 first.
+Each card displays its linked couples partner while retaining its own phone
+number, client type, intake review and service summary. Each text lists that
+client's practitioner first and their partner's practitioner second.
+
+Matched couples cards are displayed together, with explicit Guest 1 immediately
+before Guest 2, regardless of provider ordering or interleaved appointments. Each
+pair occupies the position of its earliest card in the chronological day list;
+unrelated appointments retain their relative order. An unambiguous same-client
+Guest 1/Guest 2 placeholder pair can also be adjacent for display without creating
+a profile association. A grouped two-service summary lists Guest 1 before Guest 2.
+Unmatched or ambiguous records keep their stable order. Sorting moves entire cards
+without changing contact details, practitioner assignments, intake review or messages.
+
+Same-client placeholders are never treated as the separately created profile,
+hidden or removed. Multiple possible partners, missing identifiers, mixed roles,
+extra grouped services, or inconsistent staff assignments require staff review
+instead of an automatic association. Existing observed staff on a grouped card
+are preserved with a review note when a separate Guest 2 assignment conflicts.
+These associations exist only in the imported cards; the app does not link,
+merge, create or modify Boulevard client profiles or appointments.
+
+For a grouped couples visit with both guest roles under the same booking client,
+and no separate Guest 2 profile evident in the imported day, the booking client's
+draft requests Guest #2's name and cell number immediately before the thank-you.
+The same rule covers split Guest 1 and Guest 2 records carrying the same client ID;
+only the Guest 1 card receives the request. This paragraph replaces the shorter
+individual intake reminder because it already covers both guests' intake forms.
+Linked couples cards do not receive the contact request. Missing identifiers or
+an unlinked but potentially related Guest 2 profile leave the profile status Needs
+verification instead of assuming it is absent. The Guest #2 profile selector lets
+staff verify Missing or Has separate profile before copying. No client profiles
+are searched beyond the imported appointments, and no intake links or texts are sent.
+
 An appointment containing massage and facial services is described as a
 Massage & Facial Experience, with observed practitioners ordered by service start
-time. A group flag or multiple practitioners alone no longer implies couples
-massage. A neutral Combined Experience option supports body-plus-facial visits
-and manual corrections. Separately booked sequential services are not automatically
+time. Clearly labeled add-ons or enhancements in service names or categories do
+not count as standalone components for this classification. A facial with
+microdermabrasion or another add-on is classified as Facial, uses "your facial
+session" in the message, and does not require Practitioner 2. All service names
+remain visible in the appointment summary. A group flag, multiple practitioners,
+or extra service lines alone do not establish a couples or combined visit.
+Combined Experience requires explicit body-treatment and facial evidence, or a
+manual selection. Separately booked sequential services are not automatically
 merged; cross-appointment experience association needs an explicit relationship
 rule before implementation.
 

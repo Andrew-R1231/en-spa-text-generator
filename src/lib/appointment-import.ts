@@ -1,4 +1,4 @@
-import type { Appointment, AppointmentType, IntakeStatus } from "./client-messages";
+import type { Appointment, AppointmentType } from "./client-messages";
 
 // Provider data is transformed without credentials, network access, or form contents.
 export type AppointmentNode = {
@@ -40,28 +40,32 @@ function staffName(staff: AppointmentNode["appointmentServices"][number]["staff"
 
 function serviceKind(service: AppointmentNode["appointmentServices"][number]["service"]) {
   const text = `${service.name} ${service.category?.name || ""}`;
-  return { massage: /massage/i.test(text), facial: /facial/i.test(text) };
+  return { massage: /\bmassages?\b/i.test(text), facial: /\bfacials?\b/i.test(text),
+    body: /\bbody\b|\blymphatic reset\b/i.test(text) };
+}
+
+function isAddOn(service: AppointmentNode["appointmentServices"][number]["service"]) {
+  return /\badd[\s\-–—]*ons?\b|\benhancements?\b/i.test(
+    `${service.name} ${service.category?.name || ""}`);
 }
 
 export function classifyAppointment(node: AppointmentNode): AppointmentType {
-  const kinds = node.appointmentServices.map(({ service }) => serviceKind(service));
+  // Extra service lines, add-ons, and practitioner counts do not prove a combined visit.
+  const mainServices = node.appointmentServices.filter(({ service }) => !isAddOn(service));
+  const kinds = mainServices.map(({ service }) => serviceKind(service));
   if (kinds.some(({ massage }) => massage) && kinds.some(({ facial }) => facial)) {
     return "Massage & Facial Experience";
   }
   // A group flag or multiple practitioners alone does not mean couples massage.
-  if (node.appointmentServices.some(({ service }) =>
+  if (mainServices.some(({ service }) =>
     /^\s*couples?\b/i.test(service.name) || /\bcouples?\s+massage\b/i.test(service.name))) {
     return "Couples Massage";
   }
-  if (node.appointmentServices.length > 1 && kinds.some(({ facial }) => facial)) {
+  if (kinds.some(({ body }) => body) && kinds.some(({ facial }) => facial)) {
     return "Combined Experience";
   }
+  if (kinds.some(({ facial }) => facial)) return "Facial";
   return "Standard";
-}
-
-export function intakeStatusFromCount(count: number | null | undefined): IntakeStatus {
-  return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ?
-    count > 0 ? "Incomplete" : "Complete" : "Unknown";
 }
 
 function inferSuite(node: AppointmentNode) {
@@ -71,7 +75,7 @@ function inferSuite(node: AppointmentNode) {
   }
   // Room-specific couples services can carry the room in their name only.
   // Use the same unambiguous room evidence as the partner matcher.
-  if (classifyAppointment(node) === "Couples Massage" && node.appointmentServices.length === 1) {
+  if (classifyAppointment(node) === "Couples Massage") {
     const rooms = assignedRooms(node);
     const room = rooms.size === 1 ? Array.from(rooms)[0] : undefined;
     if (room && ROOM_TO_SUITE[room]) return ROOM_TO_SUITE[room];
@@ -80,8 +84,10 @@ function inferSuite(node: AppointmentNode) {
 }
 
 function normalizeAppointment(node: AppointmentNode, timeZone: string): Appointment {
+  const couples = couplesMatch(node);
   const orderedServices = [...node.appointmentServices].sort((a, b) =>
-    Date.parse(a.startAt) - Date.parse(b.startAt));
+    Date.parse(a.startAt) - Date.parse(b.startAt) || (couples?.embeddedPartner ?
+      Number(couplesService(node, a)?.guest) - Number(couplesService(node, b)?.guest) : 0));
   const practitioners = Array.from(new Set(orderedServices.map(({ staff }) => staffName(staff)).filter(Boolean)));
   return {
     appointmentId: node.id,
@@ -90,24 +96,32 @@ function normalizeAppointment(node: AppointmentNode, timeZone: string): Appointm
     clientType: node.client.appointmentCount <= 1 ? "New Client" : "Returning Client",
     appointmentType: classifyAppointment(node),
     greetingTime: "Morning",
-    practitioner: practitioners[0] || "",
-    secondPractitioner: practitioners[1] || "",
+    // Guest roles, not the provider's array order, identify the grouped booking's staff.
+    practitioner: couples?.name || practitioners[0] || "",
+    secondPractitioner: couples?.embeddedPartner?.name || practitioners[1] || "",
     suite: inferSuite(node),
     time: new Intl.DateTimeFormat("en-US", {
       timeZone, hour: "numeric", minute: "2-digit",
     }).format(new Date(node.startAt)),
     serviceSummary: orderedServices.map(({ service }) => service.name).join(" + "),
-    intakeStatus: intakeStatusFromCount(node.pendingFormCount),
-    pendingFormCount: node.pendingFormCount ?? null,
+    // An aggregate count cannot identify intake requirements or distinguish charts.
+    // Never infer either Complete or Incomplete from it, including a zero count.
+    intakeStatus: "Unknown",
+    pendingFormCount: typeof node.pendingFormCount === "number" &&
+      Number.isSafeInteger(node.pendingFormCount) && node.pendingFormCount >= 0 ?
+      node.pendingFormCount : null,
   };
 }
 
-type CouplesMatch = {
+type CouplesService = {
   key: string;
   guest: string | null;
+};
+type CouplesMember = CouplesService & {
   staffId: string;
   name: string;
 };
+type CouplesMatch = CouplesMember & { embeddedPartner?: CouplesMember };
 
 function assignedRooms(node: AppointmentNode) {
   const rooms = new Set(node.appointmentServiceResources
@@ -120,14 +134,12 @@ function assignedRooms(node: AppointmentNode) {
   return rooms;
 }
 
-function couplesMatch(node: AppointmentNode): CouplesMatch | null {
-  if (classifyAppointment(node) !== "Couples Massage") return null;
-  // Multi-service records are not guessed into a two-appointment pair.
-  if (node.appointmentServices.length !== 1) return null;
-  const item = node.appointmentServices[0];
+function couplesService(node: AppointmentNode,
+  item: AppointmentNode["appointmentServices"][number]): CouplesService | null {
+  if (!/^\s*couples?\b/i.test(item.service.name) &&
+    !/\bcouples?\s+massage\b/i.test(item.service.name)) return null;
   const start = Date.parse(item.startAt);
-  const name = staffName(item.staff);
-  if (!Number.isFinite(start) || !name || !item.staff.id) return null;
+  if (!Number.isFinite(start)) return null;
   const rooms = assignedRooms(node);
   if (rooms.size !== 1) return null;
   const room = Array.from(rooms)[0];
@@ -138,8 +150,95 @@ function couplesMatch(node: AppointmentNode): CouplesMatch | null {
     .replace(/\b(?:r|room)\s*#?\s*\d+\b/g, "")
     .replace(/[^a-z0-9]+/g, " ").trim();
   // Exact instant + room + service family (including duration). Never match a suite alone.
-  return { key: `${start}|${room}|${family}`, guest: guestMatch?.[1] ?? null,
-    staffId: item.staff.id, name };
+  return { key: `${start}|${room}|${family}`, guest: guestMatch?.[1] ?? null };
+}
+
+function couplesMember(node: AppointmentNode,
+  item: AppointmentNode["appointmentServices"][number]): CouplesMember | null {
+  const service = couplesService(node, item);
+  const name = staffName(item.staff);
+  if (!service || !name || !item.staff.id) return null;
+  return { ...service, staffId: item.staff.id, name };
+}
+
+function couplesMatch(node: AppointmentNode): CouplesMatch | null {
+  if (classifyAppointment(node) !== "Couples Massage") return null;
+  if (node.appointmentServices.length === 1) return couplesMember(node, node.appointmentServices[0]);
+  // Only an explicit two-role group can anchor a separately created Guest 2 profile.
+  // Additional service lines, mismatched timing/family/rooms, or missing staff are not guessed.
+  if (!node.isGroupedAppointment || node.appointmentServices.length !== 2) return null;
+  const members = node.appointmentServices.map((item) => couplesMember(node, item));
+  const first = members.find((member) => member?.guest === "1");
+  const second = members.find((member) => member?.guest === "2");
+  if (!first || !second || first.key !== second.key || first.staffId === second.staffId ||
+    first.name.toLowerCase() === second.name.toLowerCase()) return null;
+  return { ...first, embeddedPartner: second };
+}
+
+function unlinkedGuest2ProfileStatus(node: AppointmentNode, active: AppointmentNode[]):
+  NonNullable<Appointment["guest2ProfileStatus"]> {
+  if (!node.isGroupedAppointment || !node.clientId) return "Unknown";
+  const members = node.appointmentServices.map((item) => couplesService(node, item));
+  const first = members.find((member) => member?.guest === "1");
+  if (!first || members.some((member) => !member || member.key !== first.key)) return "Unknown";
+  const hasEmbeddedGuest2 = members.length === 2 && members.some((member) => member?.guest === "2");
+  const hasSeparatePlaceholder = members.length === 1 && active.some((other) =>
+    other.id !== node.id && other.clientId === node.clientId && other.appointmentServices.length === 1 &&
+    couplesService(other, other.appointmentServices[0])?.key === first.key &&
+    couplesService(other, other.appointmentServices[0])?.guest === "2");
+  if (!hasEmbeddedGuest2 && !hasSeparatePlaceholder) return "Unknown";
+  // An unlinked profile may already exist but have ambiguous or inconsistent staff.
+  // Examine service identity independently of staff to avoid a false contact request.
+  const possibleSeparateProfile = active.some((other) => {
+    if (other.id === node.id || other.clientId === node.clientId) return false;
+    return other.appointmentServices.some((item) => {
+      if (!/\bguest\s*[-#]?\s*2\b/i.test(item.service.name)) return false;
+      const service = couplesService(other, item);
+      if (service) return service.key === first.key;
+      // Incomplete room/service evidence at the same time requires review, not absence inference.
+      return Date.parse(item.startAt) === Number(first.key.split("|")[0]);
+    });
+  });
+  return possibleSeparateProfile ? "Unknown" : "Missing";
+}
+
+function orderCouplesCards(appointments: Appointment[], nodes: AppointmentNode[], matches: (CouplesMatch | null)[]) {
+  const displayCandidates = appointments.map((appointment, index) => {
+    if (appointment.partnerAppointmentId) {
+      return appointments.flatMap((other, otherIndex) =>
+        other.appointmentId === appointment.partnerAppointmentId &&
+        other.partnerAppointmentId === appointment.appointmentId ? [otherIndex] : []);
+    }
+    // Same-client placeholders may be adjacent for display, but remain unlinked and unchanged.
+    const match = matches[index];
+    if (!match?.guest || match.embeddedPartner || !nodes[index].clientId) return [];
+    return matches.flatMap((other, otherIndex) => {
+      if (!other?.guest || other.embeddedPartner || index === otherIndex ||
+        appointments[otherIndex].partnerAppointmentId || nodes[index].id === nodes[otherIndex].id ||
+        nodes[index].clientId !== nodes[otherIndex].clientId ||
+        !(nodes[index].isGroupedAppointment || nodes[otherIndex].isGroupedAppointment) ||
+        match.key !== other.key || match.guest === other.guest) return [];
+      return [otherIndex];
+    });
+  });
+  const ordered: Appointment[] = [];
+  const placed = new Set<number>();
+  // The existing chronological order anchors each pair at its earliest card.
+  // Move whole cards, never individual names, contact details, or review state.
+  appointments.forEach((appointment, index) => {
+    if (placed.has(index)) return;
+    const partner = displayCandidates[index][0];
+    if (displayCandidates[index].length === 1 && !placed.has(partner) &&
+      displayCandidates[partner].length === 1 && displayCandidates[partner][0] === index) {
+      const first = matches[index]?.guest === "2" && matches[partner]?.guest === "1" ? partner : index;
+      const second = first === index ? partner : index;
+      ordered.push(appointments[first], appointments[second]);
+      placed.add(first); placed.add(second);
+    } else {
+      ordered.push(appointment); placed.add(index);
+    }
+  });
+  return ordered;
 }
 
 export function normalizeDailyAppointments(nodes: AppointmentNode[], timeZone: string): Appointment[] {
@@ -149,22 +248,43 @@ export function normalizeDailyAppointments(nodes: AppointmentNode[], timeZone: s
   const matches = active.map(couplesMatch);
   const candidates = matches.map((match, index) => match ? matches.flatMap((other, otherIndex) => {
     if (!other || index === otherIndex || active[index].id === active[otherIndex].id ||
-      match.key !== other.key || match.staffId === other.staffId || match.name === other.name) return [];
+      match.key !== other.key || match.staffId === other.staffId ||
+      match.name.toLowerCase() === other.name.toLowerCase()) return [];
     if (active[index].clientId && active[index].clientId === active[otherIndex].clientId) return [];
     if ((match.guest || other.guest) && (!match.guest || !other.guest || match.guest === other.guest)) return [];
+    if (match.embeddedPartner || other.embeddedPartner) {
+      const group = match.embeddedPartner ? match : other;
+      const separate = match.embeddedPartner ? other : match;
+      // Both profiles must be known and different; never treat a placeholder as a new client.
+      if (!active[index].clientId || !active[otherIndex].clientId || separate.embeddedPartner ||
+        separate.guest !== "2" || group.embeddedPartner!.staffId !== separate.staffId) return [];
+    }
     return [otherIndex];
   }) : []);
-  return appointments.map((appointment, index) => {
+  const normalized: Appointment[] = appointments.map((appointment, index) => {
     if (appointment.appointmentType !== "Couples Massage") return appointment;
-    if (appointment.secondPractitioner) return appointment;
+    appointment = { ...appointment, guest2ProfileStatus: unlinkedGuest2ProfileStatus(active[index], active) };
     const partnerIndex = candidates[index][0];
     if (candidates[index].length === 1 && candidates[partnerIndex].length === 1 &&
       candidates[partnerIndex][0] === index) {
-      return { ...appointment, secondPractitioner: matches[partnerIndex]!.name,
-        partnerAppointmentId: active[partnerIndex].id };
+      return { ...appointment, secondPractitioner: matches[index]?.embeddedPartner?.name || matches[partnerIndex]!.name,
+        partnerAppointmentId: active[partnerIndex].id, guest2ProfileStatus: "Linked" };
     }
+    if (appointment.secondPractitioner && matches[index]?.embeddedPartner) {
+      const related = matches.some((other, otherIndex) => other && otherIndex !== index &&
+        other.key === matches[index]!.key && other.guest === "2" &&
+        active[otherIndex].clientId !== active[index].clientId);
+      if (!related) return appointment;
+      return { ...appointment, importWarnings: [
+        "A separate Guest 2 record could not be linked uniquely or has a different staff assignment. Verify the two client cards and practitioner assignments; no records were merged.",
+      ] };
+    }
+    if (appointment.secondPractitioner) return { ...appointment, importWarnings: [
+      "This multi-service couples record could not be associated by explicit guest roles. Verify client and practitioner assignments before copying.",
+    ] };
     return { ...appointment, importWarnings: [
       "Couples partner could not be matched uniquely. Verify Practitioner 2 before copying.",
     ] };
   });
+  return orderCouplesCards(normalized, active, matches);
 }
