@@ -115,6 +115,14 @@ for (const count of [0, 1, 2, undefined, null, -1, 0.5, NaN, Infinity]) {
   });
 }
 
+test("intake verification alert stays brief without changing the manual status choices", () => {
+  const page = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /Verify intake status and review the draft’s intake wording before copying\./);
+  assert.doesNotMatch(page, /Check the applicable client intake form in Boulevard|not staff charts such as SOAP/);
+  assert.match(page, /appointment\.intakeStatus === "Unknown"/);
+  assert.match(page, /value="Complete"/); assert.match(page, /value="Incomplete"/);
+});
+
 test("staff can verify intake independently of aggregate count", () => {
   const node = fixture("forms"); node.pendingFormCount = 1;
   const [appointment] = imported([node]);
@@ -373,6 +381,47 @@ function couplesAddOn(node: AppointmentNode, name = "Deep Tissue Focus for 1",
 }
 
 for (const order of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+  test(`explicit Mindy/Liann guest roles link without a group flag, provider order ${order}`, () => {
+    const [group, separate] = groupWithSeparateGuest();
+    group.isGroupedAppointment = false; separate.isGroupedAppointment = false;
+    const guest1 = group.appointmentServices.find(item => /Guest 1/.test(item.service.name))!;
+    const guest2 = group.appointmentServices.find(item => /Guest 2/.test(item.service.name))!;
+    guest1.staff = fixture("explicit-first", 1, 6, "Mindy").appointmentServices[0].staff;
+    guest2.staff = fixture("explicit-second", 2, 6, "Liann").appointmentServices[0].staff;
+    separate.appointmentServices[0].staff = structuredClone(guest2.staff);
+    group.appointmentServices.splice(1, 0, couplesAddOn(group));
+    const ordinary = ordinaryFixture("between-explicit-guests", group.startAt);
+    const nodes = [group, separate, ordinary]; const input = order.map(i => nodes[i]);
+    const before = structuredClone(input); const appointments = imported(input);
+    const couple = appointments.filter(item => item.appointmentType === "Couples Massage");
+    assert.deepEqual(couple.map(item => item.appointmentId), [group.id, separate.id]);
+    assert.equal(appointments.indexOf(couple[1]), appointments.indexOf(couple[0]) + 1);
+    assert.deepEqual(couple.map(item => [item.practitioner, item.secondPractitioner]),
+      [["Mindy", "Liann"], ["Liann", "Mindy"]]);
+    assert.deepEqual(couple.map(item => item.partnerAppointmentId), [separate.id, group.id]);
+    assert.ok(couple.every(item => canCopyMessage(item) && !item.importWarnings?.length));
+    assert.deepEqual(input, before);
+  });
+}
+
+for (const [label, mutate, reason] of [
+  ["missing profile ID", (nodes: AppointmentNode[]) => { delete nodes[1].clientId; }, /client profile identifier is missing/i],
+  ["same profile ID", (nodes: AppointmentNode[]) => { nodes[1].clientId = nodes[0].clientId; }, /same client profile/i],
+  ["different staff ID despite matching names", (nodes: AppointmentNode[]) => {
+    nodes[1].appointmentServices[0].staff.id = "invented-different-staff-id";
+  }, /staff identifiers do not agree/i],
+  ["missing staff ID", (nodes: AppointmentNode[]) => { delete nodes[0].appointmentServices[0].staff.id; }, /staff identifier is missing/i],
+] as const) {
+  test(`unlinked Guest 2 explains ${label} without exposing identifiers`, () => {
+    const nodes = groupWithSeparateGuest(); mutate(nodes);
+    const second = imported(nodes).find(item => item.appointmentId === nodes[1].id)!;
+    assert.equal(second.secondPractitioner, ""); assert.equal(second.partnerAppointmentId, undefined);
+    assert.match(second.importWarnings!.join(" "), reason);
+    assert.doesNotMatch(second.importWarnings!.join(" "), /test-client-|test-staff-|invented-different-staff-id/);
+  });
+}
+
+for (const order of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
   test(`3:30 grouped couples with Deep Tissue add-on links and sorts both clients for service order ${order}`, () => {
     const [group, separate] = groupWithSeparateGuest();
     const lines = [group.appointmentServices[1], couplesAddOn(group), group.appointmentServices[0]];
@@ -558,18 +607,20 @@ for (const [label, mutate] of [
   ["additional grouped service", (nodes: AppointmentNode[]) => {
     nodes[0].appointmentServices.push(structuredClone(nodes[0].appointmentServices[0]));
   }],
-  ["missing grouped flag", (nodes: AppointmentNode[]) => { nodes[0].isGroupedAppointment = false; }],
   ["conflicting grouped room resource", (nodes: AppointmentNode[]) => {
     nodes[0].appointmentServiceResources.push({ resource: { name: "Room 4" } });
   }],
 ] as const) {
-  test(`grouped couples association refuses ${label}`, () => {
-    const nodes = groupWithSeparateGuest(); mutate(nodes); const appointments = imported(nodes);
-    assert.ok(appointments.every((appointment) => !appointment.partnerAppointmentId));
-    assert.equal(appointments[1].secondPractitioner, "");
-    assert.equal(canCopyMessage(appointments[1]), false);
-    assert.ok(appointments[1].importWarnings?.length);
-  });
+  for (const groupedFlag of [true, false]) {
+    test(`two-role couples association refuses ${label} with group flag ${groupedFlag}`, () => {
+      const nodes = groupWithSeparateGuest(); nodes[0].isGroupedAppointment = groupedFlag;
+      mutate(nodes); const appointments = imported(nodes);
+      assert.ok(appointments.every((appointment) => !appointment.partnerAppointmentId));
+      assert.equal(appointments[1].secondPractitioner, "");
+      assert.equal(canCopyMessage(appointments[1]), false);
+      assert.ok(appointments[1].importWarnings?.length);
+    });
+  }
 }
 
 test("conflicting external assignment warns on the grouped card without replacing observed staff", () => {

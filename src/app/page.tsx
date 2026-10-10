@@ -530,9 +530,7 @@ export default function EnSpaDailyClientTextGenerator() {
                   )}
                   {appointment.appointmentId && appointment.intakeStatus === "Unknown" && (
                     <p role="alert" className="text-sm text-amber-800">
-                      Intake status needs verification. Check the applicable client intake form in Boulevard,
-                      not staff charts such as SOAP, and select Complete or Incomplete before copying.
-                      Review the draft’s intake wording before copying.
+                      Verify intake status and review the draft’s intake wording before copying.
                     </p>
                   )}
                   {isCouplesMassage && appointment.guest2ProfileStatus === "Missing" && (

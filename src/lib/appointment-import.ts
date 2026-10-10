@@ -181,7 +181,9 @@ function couplesMatch(node: AppointmentNode): CouplesMatch | null {
   // Only an explicit two-role group can anchor a separately created Guest 2 profile.
   // Recognized add-ons are retained in summaries but do not count as extra guests.
   // Unknown extra services, mismatched timing/family/rooms, or missing staff are not guessed.
-  if (!node.isGroupedAppointment || services.length !== 2) return null;
+  // Explicit complementary service roles are sufficient; the provider's group flag
+  // is not required to establish this two-service structure.
+  if (services.length !== 2) return null;
   const members = services.map((item) => couplesMember(node, item));
   const first = members.find((member) => member?.guest === "1");
   const second = members.find((member) => member?.guest === "2");
@@ -192,7 +194,7 @@ function couplesMatch(node: AppointmentNode): CouplesMatch | null {
 
 function unlinkedGuest2ProfileStatus(node: AppointmentNode, active: AppointmentNode[]):
   NonNullable<Appointment["guest2ProfileStatus"]> {
-  if (!node.isGroupedAppointment || !node.clientId) return "Unknown";
+  if (!node.clientId || (!node.isGroupedAppointment && !couplesMatch(node)?.embeddedPartner)) return "Unknown";
   const members = mainServices(node).map((item) => couplesService(node, item));
   const first = members.find((member) => member?.guest === "1");
   if (!first || members.some((member) => !member || member.key !== first.key)) return "Unknown";
@@ -215,6 +217,47 @@ function unlinkedGuest2ProfileStatus(node: AppointmentNode, active: AppointmentN
     });
   });
   return possibleSeparateProfile ? "Unknown" : "Missing";
+}
+
+function couplesReviewDetail(index: number, nodes: AppointmentNode[],
+  matches: (CouplesMatch | null)[], candidates: number[][]): string {
+  const recordIssue = (node: AppointmentNode) => {
+    const services = mainServices(node);
+    if (services.length < 1 || services.length > 2) return "Extra or missing main services prevent identifying the guest roles.";
+    if (assignedRooms(node).size !== 1) return "Room information is missing or conflicting.";
+    if (services.some(item => !item.staff.id)) return "A required staff identifier is missing.";
+    if (services.some(item => !staffName(item.staff))) return "A required practitioner name is missing.";
+    return "The main guest services do not agree on roles, exact start time, service family, or distinct staff.";
+  };
+  const match = matches[index];
+  if (!match) return recordIssue(nodes[index]);
+  if (candidates[index].length > 1 || candidates[index].some(i => candidates[i].length > 1)) {
+    return "More than one eligible partner appointment was found.";
+  }
+  const related = nodes.flatMap((node, otherIndex) => {
+    if (index === otherIndex || nodes[index].id === node.id) return [];
+    return mainServices(node).some(item => {
+      const service = couplesService(node, item);
+      return service?.key === match.key && service.guest && service.guest !== match.guest;
+    }) ? [otherIndex] : [];
+  });
+  const reasons = related.map(otherIndex => {
+    const other = matches[otherIndex];
+    if (!other) return `Potential partner: ${recordIssue(nodes[otherIndex])}`;
+    if (!nodes[index].clientId || !nodes[otherIndex].clientId) return "A required client profile identifier is missing.";
+    if (nodes[index].clientId === nodes[otherIndex].clientId) return "Both appointments use the same client profile, not two separate profiles.";
+    const group = match.embeddedPartner ? match : other.embeddedPartner ? other : null;
+    const separate = match.embeddedPartner ? other : match;
+    if (group && group.embeddedPartner!.staffId !== separate.staffId) {
+      return "The grouped and separate Guest 2 staff identifiers do not agree, even if their displayed names match.";
+    }
+    if (match.staffId === other.staffId || match.name.toLowerCase() === other.name.toLowerCase()) {
+      return "Two distinct practitioner assignments are required.";
+    }
+    return "The potential partner is not uniquely associated in both directions.";
+  });
+  return Array.from(new Set(reasons)).join(" ") ||
+    "No complementary guest service with the same exact start time, room, and service family was found.";
 }
 
 function orderCouplesCards(appointments: Appointment[], nodes: AppointmentNode[], matches: (CouplesMatch | null)[]) {
@@ -292,13 +335,16 @@ export function normalizeDailyAppointments(nodes: AppointmentNode[], timeZone: s
       if (!related) return appointment;
       return { ...appointment, importWarnings: [
         "A separate Guest 2 record could not be linked uniquely or has a different staff assignment. Verify the two client cards and practitioner assignments; no records were merged.",
+        couplesReviewDetail(index, active, matches, candidates),
       ] };
     }
     if (appointment.secondPractitioner) return { ...appointment, importWarnings: [
       "This multi-service couples record could not be associated by explicit guest roles. Verify client and practitioner assignments before copying.",
+      couplesReviewDetail(index, active, matches, candidates),
     ] };
     return { ...appointment, importWarnings: [
       "Couples partner could not be matched uniquely. Verify Practitioner 2 before copying.",
+      couplesReviewDetail(index, active, matches, candidates),
     ] };
   });
   return orderCouplesCards(normalized, active, matches);

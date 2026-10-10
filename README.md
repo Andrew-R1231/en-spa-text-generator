@@ -75,8 +75,10 @@ different practitioner names. Each guest retains their own card, contact details
 and form status; no bookings are merged or modified.
 
 A grouped record containing exactly Guest 1 and Guest 2 can also link to a
-separate Guest 2 appointment created for a different client profile. Both service
-lines must agree on room, start instant and service family; the separate Guest 2
+separate Guest 2 appointment created for a different client profile. Explicit guest
+roles can establish this structure even when Boulevard's group flag is false;
+the flag is never sufficient by itself. All other matching safeguards still apply.
+Both service lines must agree on room, start instant and service family; the separate Guest 2
 record must agree with the grouped Guest 2 staff ID. Both client IDs must be
 present and different, and the match must be unique in both directions. Guest
 roles determine practitioner order even if the provider returns Guest 2 first.
@@ -98,6 +100,8 @@ hidden or removed. Multiple possible partners, missing identifiers, mixed roles,
 extra grouped services, or inconsistent staff assignments require staff review
 instead of an automatic association. Existing observed staff on a grouped card
 are preserved with a review note when a separate Guest 2 assignment conflicts.
+Unlinked cards also explain missing or conflicting profile, staff, room, or service
+evidence without exposing raw client or staff identifiers.
 These associations exist only in the imported cards; the app does not link,
 merge, create or modify Boulevard client profiles or appointments.
 
