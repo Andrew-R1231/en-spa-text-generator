@@ -363,6 +363,115 @@ function groupWithSeparateGuest() {
   return [group, separate];
 }
 
+function couplesAddOn(node: AppointmentNode, name = "Deep Tissue Focus for 1",
+  category: { name: string } | null = null) {
+  const addon = structuredClone(node.appointmentServices.find((item) => /Guest 1/.test(item.service.name)) ||
+    node.appointmentServices[0]);
+  addon.id = "invented-couples-addon";
+  addon.service = { name, category };
+  return addon;
+}
+
+for (const order of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+  test(`3:30 grouped couples with Deep Tissue add-on links and sorts both clients for service order ${order}`, () => {
+    const [group, separate] = groupWithSeparateGuest();
+    const lines = [group.appointmentServices[1], couplesAddOn(group), group.appointmentServices[0]];
+    group.appointmentServices = order.map((index) => lines[index]);
+    const ordinary = ordinaryFixture("between-addon-couple", group.startAt);
+    const input = [separate, ordinary, group]; const before = structuredClone(input);
+    const appointments = imported(input);
+    assert.deepEqual(appointments.map((item) => item.appointmentId), [group.id, separate.id, ordinary.id]);
+    assert.deepEqual(appointments.slice(0, 2).map((item) => [item.practitioner, item.secondPractitioner]),
+      [["Peter", "Mindy"], ["Mindy", "Peter"]]);
+    assert.deepEqual(appointments.slice(0, 2).map((item) => item.partnerAppointmentId), [separate.id, group.id]);
+    assert.ok(appointments.slice(0, 2).every((item) => item.guest2ProfileStatus === "Linked" &&
+      canCopyMessage(item) && !item.importWarnings?.length));
+    assert.match(appointments[0].serviceSummary, /^Couples 60 — Guest 1 · R6.* \+ Deep Tissue Focus for 1 \+ Couples 60 — Guest 2 · R6/);
+    assert.equal(appointments[0].serviceSummary.split(" + ").length, 3);
+    assert.deepEqual(appointments.slice(0, 2).map((item) => item.mobilePhone), ["202-555-0101", "202-555-0102"]);
+    assert.deepEqual(appointments.slice(0, 2).map((item) => item.pendingFormCount), [1, 0]);
+    assert.ok(appointments.slice(0, 2).every((item) => item.intakeStatus === "Unknown"));
+    assert.deepEqual(input, before);
+  });
+}
+
+for (const [name, category] of [
+  ["Hot Stones for 1", { name: "Couples Massage Add-Ons" }],
+  ["Deep Tissue Focus for 2", null],
+  ["Aromatherapy Enhancement", null],
+  ["Facial Add-On", { name: "Facials" }],
+] as const) {
+  test(`recognized ${name} does not block couples linkage or introduce an add-on practitioner`, () => {
+    const nodes = groupWithSeparateGuest();
+    const addon = couplesAddOn(nodes[0], name, category);
+    addon.staff = fixture("addon-staff", 1, 6, "Liann").appointmentServices[0].staff;
+    nodes[0].appointmentServices.unshift(addon);
+    const appointments = imported(nodes);
+    assert.deepEqual(appointments.map((item) => [item.practitioner, item.secondPractitioner]),
+      [["Peter", "Mindy"], ["Mindy", "Peter"]]);
+    assert.ok(appointments.every((item) => item.partnerAppointmentId && item.appointmentType === "Couples Massage"));
+    assert.ok(appointments[0].serviceSummary.includes(name));
+  });
+}
+
+test("separate Guest 2 with an add-on still matches the embedded Guest 2 staff", () => {
+  const nodes = groupWithSeparateGuest();
+  const addon = couplesAddOn(nodes[1], "Hot Stones for 2", { name: "Couples Massage Add-Ons" });
+  addon.staff = fixture("addon-helper", 1, 6, "Liann").appointmentServices[0].staff;
+  nodes[1].appointmentServices.unshift(addon);
+  const appointments = imported(nodes);
+  assert.equal(appointments[1].practitioner, "Mindy");
+  assert.equal(appointments[1].secondPractitioner, "Peter");
+  assert.equal(appointments[1].partnerAppointmentId, nodes[0].id);
+});
+
+test("grouped couples with add-on but no separate profile retains both staff and requests Guest 2 contact", () => {
+  const [group] = groupWithSeparateGuest(); group.appointmentServices.push(couplesAddOn(group));
+  const [appointment] = imported([group]);
+  assert.equal(appointment.practitioner, "Peter"); assert.equal(appointment.secondPractitioner, "Mindy");
+  assert.equal(appointment.guest2ProfileStatus, "Missing");
+  assert.ok(generateText(appointment, suite).includes(GUEST_2_CONTACT_REQUEST));
+});
+
+test("unrelated add-on staff is not invented as Practitioner 2 on an unmatched one-guest card", () => {
+  const node = fixture("unmatched-addon");
+  const addon = couplesAddOn(node);
+  addon.staff = fixture("addon-unrelated", 1, 6, "Liann").appointmentServices[0].staff;
+  node.appointmentServices.unshift(addon);
+  const [appointment] = imported([node]);
+  assert.equal(appointment.practitioner, "Peter"); assert.equal(appointment.secondPractitioner, "");
+  assert.equal(canCopyMessage(appointment), false);
+});
+
+for (const [label, mutate] of [
+  ["unidentified extra service", (nodes: AppointmentNode[]) => {
+    const extra = couplesAddOn(nodes[0], "Unidentified Treatment"); nodes[0].appointmentServices.push(extra);
+  }],
+  ["duplicate Guest 2 role", (nodes: AppointmentNode[]) => {
+    nodes[0].appointmentServices.push(structuredClone(nodes[0].appointmentServices[0]));
+  }],
+  ["conflicting room", (nodes: AppointmentNode[]) => {
+    nodes[0].appointmentServiceResources.push({ resource: { name: "Room 4" } });
+  }],
+  ["different partner staff", (nodes: AppointmentNode[]) => {
+    nodes[1].appointmentServices[0].staff = fixture("other-addon-staff", 2, 6, "Liann").appointmentServices[0].staff;
+  }],
+  ["duplicate separate profiles", (nodes: AppointmentNode[]) => {
+    const extra = structuredClone(nodes[1]); extra.id = "invented-extra-addon-appointment";
+    extra.clientId = "invented-extra-addon-client"; nodes.push(extra);
+  }],
+] as const) {
+  test(`add-on handling does not bypass ${label} ambiguity`, () => {
+    const nodes = groupWithSeparateGuest();
+    nodes[0].appointmentServices.push(couplesAddOn(nodes[0])); mutate(nodes);
+    const appointments = imported(nodes);
+    assert.ok(appointments.every((item) => !item.partnerAppointmentId));
+    const separate = appointments.find((item) => item.appointmentId === nodes[1].id)!;
+    assert.equal(separate.secondPractitioner, "");
+    assert.ok(separate.importWarnings?.length);
+  });
+}
+
 test("grouped two-guest booking links a separately created Guest 2 profile without merging cards", () => {
   const nodes = groupWithSeparateGuest(); const before = structuredClone(nodes);
   const appointments = imported(nodes);

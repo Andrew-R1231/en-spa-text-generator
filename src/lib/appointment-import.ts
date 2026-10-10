@@ -46,18 +46,24 @@ function serviceKind(service: AppointmentNode["appointmentServices"][number]["se
 
 function isAddOn(service: AppointmentNode["appointmentServices"][number]["service"]) {
   return /\badd[\s\-–—]*ons?\b|\benhancements?\b/i.test(
-    `${service.name} ${service.category?.name || ""}`);
+    `${service.name} ${service.category?.name || ""}`) ||
+    // This existing couples enhancement is not labeled Add-On in its service name.
+    /^\s*deep tissue focus for [12]\s*$/i.test(service.name);
+}
+
+function mainServices(node: AppointmentNode) {
+  return node.appointmentServices.filter(({ service }) => !isAddOn(service));
 }
 
 export function classifyAppointment(node: AppointmentNode): AppointmentType {
   // Extra service lines, add-ons, and practitioner counts do not prove a combined visit.
-  const mainServices = node.appointmentServices.filter(({ service }) => !isAddOn(service));
-  const kinds = mainServices.map(({ service }) => serviceKind(service));
+  const services = mainServices(node);
+  const kinds = services.map(({ service }) => serviceKind(service));
   if (kinds.some(({ massage }) => massage) && kinds.some(({ facial }) => facial)) {
     return "Massage & Facial Experience";
   }
   // A group flag or multiple practitioners alone does not mean couples massage.
-  if (mainServices.some(({ service }) =>
+  if (services.some(({ service }) =>
     /^\s*couples?\b/i.test(service.name) || /\bcouples?\s+massage\b/i.test(service.name))) {
     return "Couples Massage";
   }
@@ -85,9 +91,15 @@ function inferSuite(node: AppointmentNode) {
 
 function normalizeAppointment(node: AppointmentNode, timeZone: string): Appointment {
   const couples = couplesMatch(node);
+  const guestOrder = (item: AppointmentNode["appointmentServices"][number]) => {
+    const guest = couplesService(node, item)?.guest;
+    if (guest) return Number(guest);
+    const addonGuest = isAddOn(item.service) && /\bfor\s+([12])\b/i.exec(item.service.name);
+    return addonGuest ? Number(addonGuest[1]) + 0.5 : 3;
+  };
   const orderedServices = [...node.appointmentServices].sort((a, b) =>
     Date.parse(a.startAt) - Date.parse(b.startAt) || (couples?.embeddedPartner ?
-      Number(couplesService(node, a)?.guest) - Number(couplesService(node, b)?.guest) : 0));
+      guestOrder(a) - guestOrder(b) : 0));
   const practitioners = Array.from(new Set(orderedServices.map(({ staff }) => staffName(staff)).filter(Boolean)));
   return {
     appointmentId: node.id,
@@ -98,7 +110,7 @@ function normalizeAppointment(node: AppointmentNode, timeZone: string): Appointm
     greetingTime: "Auto",
     // Guest roles, not the provider's array order, identify the grouped booking's staff.
     practitioner: couples?.name || practitioners[0] || "",
-    secondPractitioner: couples?.embeddedPartner?.name || practitioners[1] || "",
+    secondPractitioner: couples ? couples.embeddedPartner?.name || "" : practitioners[1] || "",
     suite: inferSuite(node),
     time: new Intl.DateTimeFormat("en-US", {
       timeZone, hour: "numeric", minute: "2-digit",
@@ -136,6 +148,7 @@ function assignedRooms(node: AppointmentNode) {
 
 function couplesService(node: AppointmentNode,
   item: AppointmentNode["appointmentServices"][number]): CouplesService | null {
+  if (isAddOn(item.service)) return null;
   if (!/^\s*couples?\b/i.test(item.service.name) &&
     !/\bcouples?\s+massage\b/i.test(item.service.name)) return null;
   const start = Date.parse(item.startAt);
@@ -163,11 +176,13 @@ function couplesMember(node: AppointmentNode,
 
 function couplesMatch(node: AppointmentNode): CouplesMatch | null {
   if (classifyAppointment(node) !== "Couples Massage") return null;
-  if (node.appointmentServices.length === 1) return couplesMember(node, node.appointmentServices[0]);
+  const services = mainServices(node);
+  if (services.length === 1) return couplesMember(node, services[0]);
   // Only an explicit two-role group can anchor a separately created Guest 2 profile.
-  // Additional service lines, mismatched timing/family/rooms, or missing staff are not guessed.
-  if (!node.isGroupedAppointment || node.appointmentServices.length !== 2) return null;
-  const members = node.appointmentServices.map((item) => couplesMember(node, item));
+  // Recognized add-ons are retained in summaries but do not count as extra guests.
+  // Unknown extra services, mismatched timing/family/rooms, or missing staff are not guessed.
+  if (!node.isGroupedAppointment || services.length !== 2) return null;
+  const members = services.map((item) => couplesMember(node, item));
   const first = members.find((member) => member?.guest === "1");
   const second = members.find((member) => member?.guest === "2");
   if (!first || !second || first.key !== second.key || first.staffId === second.staffId ||
@@ -178,14 +193,14 @@ function couplesMatch(node: AppointmentNode): CouplesMatch | null {
 function unlinkedGuest2ProfileStatus(node: AppointmentNode, active: AppointmentNode[]):
   NonNullable<Appointment["guest2ProfileStatus"]> {
   if (!node.isGroupedAppointment || !node.clientId) return "Unknown";
-  const members = node.appointmentServices.map((item) => couplesService(node, item));
+  const members = mainServices(node).map((item) => couplesService(node, item));
   const first = members.find((member) => member?.guest === "1");
   if (!first || members.some((member) => !member || member.key !== first.key)) return "Unknown";
   const hasEmbeddedGuest2 = members.length === 2 && members.some((member) => member?.guest === "2");
   const hasSeparatePlaceholder = members.length === 1 && active.some((other) =>
-    other.id !== node.id && other.clientId === node.clientId && other.appointmentServices.length === 1 &&
-    couplesService(other, other.appointmentServices[0])?.key === first.key &&
-    couplesService(other, other.appointmentServices[0])?.guest === "2");
+    other.id !== node.id && other.clientId === node.clientId && mainServices(other).length === 1 &&
+    couplesService(other, mainServices(other)[0])?.key === first.key &&
+    couplesService(other, mainServices(other)[0])?.guest === "2");
   if (!hasEmbeddedGuest2 && !hasSeparatePlaceholder) return "Unknown";
   // An unlinked profile may already exist but have ambiguous or inconsistent staff.
   // Examine service identity independently of staff to avoid a false contact request.

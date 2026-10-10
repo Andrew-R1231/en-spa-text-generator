@@ -57,6 +57,12 @@ applicability metadata should be queried. Form answers and clinical notes are ou
 of scope. Verify exact wire fields, enum meanings, expiration/reuse and staff
 review semantics in sandbox before mapping them into the internal contract.
 
+Recognized add-ons (including Deep Tissue Focus for 1/2 and services explicitly
+labeled or categorized Add-On/Enhancement) do not count as extra guests for couples
+matching. Their summary lines remain visible, and their staff cannot substitute
+for the practitioner assigned to a main Guest 1 or Guest 2 service. Unknown extra
+services and duplicate guest roles still require manual review.
+
 Separate couples appointments are paired only when they have an unambiguous
 mutual match on room number, exact service start instant and service-name family
 including duration. Guest 1 and Guest 2 markers must be complementary when
